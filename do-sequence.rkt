@@ -13,8 +13,8 @@
     (pattern (~seq #:when guard-expr:expr)
              #:attr ids-being-bound '()))
 
-  ;; do/sequence-transformer : Syntax[[(id:id ...) (do/sequence (clause:do/seq-clause ...) body:expr ...+)]]
-  ;;                           Syntax[ExpandedForClause] -> Syntax[ExpandedForClause]
+  ;; do/sequence-transformer : Syntax[[(id:id ...) (do/sequence (clause:do/seq-clause ...) body:expr ...+)]] ->
+  ;;                           Syntax[ExpandedForClause]
   (define (do/sequence-transformer stx)
     (syntax-parse stx
       [[(id:id ...) (_ () body:expr ...+)]
@@ -173,7 +173,8 @@
                                             (if (and guard-expr1 ...)
                                                 (let-values ([(i-outer-id ...) i-outer-rhs] ... ...)
                                                   i-outer-check*
-                                                  (loop* loop-arg* ... i-loop-expr ... ... id1 ... ... i-outer-id ... ... ... #t))
+                                                  (loop* loop-arg* ... i-loop-expr ... ...
+                                                         id1 ... ... i-outer-id ... ... ... #t))
                                                 (loop* loop-arg* ... empty ... i-outer-id-id1-false ... #f))
                                             (values false* ... #f id-false ... i-outer-id-id1-false ... #f)))
                                       (values false* ... #f id-false ... i-outer-id-id1-false ... #f))))])
