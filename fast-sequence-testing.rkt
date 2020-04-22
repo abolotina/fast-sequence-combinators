@@ -6,7 +6,8 @@
                      syntax/srcloc)
          rackunit
          "fast-sequence-filter.rkt"
-         "fast-sequence-map.rkt")
+         "fast-sequence-map.rkt"
+         "do-sequence.rkt")
 
 (provide exp-for-clause
          test-once
