@@ -119,5 +119,5 @@
     (syntax-case stx ()
       [[(id ...) (_ f seq-expr)]
        (with-syntax ([estx (expand-for-clause stx #'[(id ...) seq-expr])])
-         (fast-sequence-filter-transformer #'((id ...) f seq-expr) #'(estx)))]
+         (fast-sequence-filter-transformer #'((id ...) f seq-expr) #'estx))]
       [_ #f])))

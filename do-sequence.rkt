@@ -97,177 +97,171 @@
                       [estx2 (map (lambda (bind-clause)
                                     (expand-for-clause stx bind-clause))
                                   (syntax->list #'([(id2 ...) inner-seq-expr] ...)))])
-         (syntax-case #'(estx1 estx2) ()
-           [(((([(outer-id ...) outer-rhs] ...)
-               outer-check
-               ([loop-id loop-expr] ...)
-               pos-guard
-               ([(inner-id ...) inner-rhs] ...)
-               pre-guard
-               post-guard
-               (loop-arg ...)) ...)
-             
-             ((([(i-outer-id ...) i-outer-rhs] ...)
-               i-outer-check
-               ([i-loop-id i-loop-expr] ...)
-               i-pos-guard
-               ([(i-inner-id ...) i-inner-rhs] ...)
-               i-pre-guard
-               i-post-guard
-               (i-loop-arg ...)) ...))
-            ;; ==>
-            (with-syntax* ([(loop-id* ...) (generate-temporaries #'(loop-id ... ...))]
-                           [(loop-arg-id ...) (generate-temporaries #'(loop-arg ... ...))]
-                           [(loop-arg* ...) #'(((loop-arg-id loop-id ... ...) inner-id ... ... ...) ...)]
-                           [(loop-arg** ...) (syntax->list #'(loop-arg ... ...))]
-                           [(false* ...) (build-list
-                                          (length (syntax->list #'(i-loop-id ... ... loop-id ... ...)))
-                                          (lambda (x) #'#f))]
-                           [(id-false ...) (build-list
-                                            (length (syntax->list #'(id ...)))
-                                            (lambda (x) #'#f))]
-                           [(i-outer-id-id1-false ...) (build-list
-                                                        (length (syntax->list #'(id1 ... ... i-outer-id ... ... ...)))
-                                                        (lambda (x) #'#f))]
-                           [pos-guard-id* #'((pos-guard-id outer-id ... ... ...) loop-id ... ...)]
-
-                           [(i-outer-check-id i-pos-guard-id i-pos-guard* ids-ok)
-                            (generate-temporaries #'(i-outer-check-id i-pos-guard-id i-pos-guard* ids1-ok))]
-                           [(empty ...) (build-list
-                                         (length (syntax->list #'(i-loop-id ... ...)))
-                                         (lambda (x) #''()))]
-                           [(i-loop-id* ...) (generate-temporaries #'(i-loop-id ... ...))]
-                           [(i-loop-id** ...) (generate-temporaries #'(i-loop-id ... ...))]
-                           [(i-loop-id*** ...) (generate-temporaries #'(i-loop-id ... ...))]
-                           [(i-loop-arg-id ...) (generate-temporaries #'(i-loop-arg ... ...))]
-                           [(i-loop-arg* ...)
-                            #'((((i-loop-arg-id i-outer-id ... ...) i-loop-id ... ...) i-inner-id ... ... ...) ...)]
-                           [(i-loop-arg** ...) (syntax->list #'(i-loop-arg ... ...))]
-                           [i-outer-check* #'(i-outer-check-id i-outer-id ... ... ...)]
-                           [(loop*) (generate-temporaries #'(loop*))]
-                           [(body*) (generate-temporaries #'(body*))]
-                           [(id1* ...) (generate-temporaries #'(id1 ... ...))]
-                           [(guard) (generate-temporaries #'(guard))])
-              (for-clause-syntax-protect
-               #'[(id ...)
-                  (:do-in
-                   ;; outer bindings
-                   ([(outer-id ... ... ... pos-guard-id i-outer-check-id
-                               i-loop-arg-id ... process-outer-seqs body* guard)
-                     (let-values ([(outer-id ...) outer-rhs] ... ...
-                                  [(pos-guard-id) (lambda (outer-id ... ... ...)
-                                                    (lambda (loop-id ... ...) (and pos-guard ...)))]
-                                  [(i-outer-check-id) (lambda (i-outer-id ... ... ...) (and i-outer-check ...))]
-                                  [(i-loop-arg-id) (lambda (i-outer-id ... ...)
-                                                     (lambda (i-loop-id ... ...)
-                                                       (lambda (i-inner-id ... ... ...) i-loop-arg**)))] ...
-                                  [(body*) (lambda (id1 ... ... id2 ... ...) body ...)]
-                                  [(guard) (and guard-expr ...)])
-                       (let ([process-outer-seqs
-                              (lambda (outer-id ... ... ...)
-                                (lambda (loop-id ... ... loop* loop-arg-id ...)
-                                  (if pos-guard-id*
-                                      (let-values ([(inner-id ...) inner-rhs] ... ...)
-                                        (if (and pre-guard ...
-                                                 post-guard ...)
-                                            (if (and guard-expr1 ...)
-                                                (let-values ([(i-outer-id ...) i-outer-rhs] ... ...)
-                                                  i-outer-check*
-                                                  (loop* loop-arg* ... i-loop-expr ... ...
-                                                         id1 ... ... i-outer-id ... ... ... #t))
-                                                (loop* loop-arg* ... empty ... i-outer-id-id1-false ... #f))
-                                            (values false* ... #f id-false ... i-outer-id-id1-false ... #f)))
-                                      (values false* ... #f id-false ... i-outer-id-id1-false ... #f))))])
-                         (values outer-id ... ... ... pos-guard-id i-outer-check-id
-                                 i-loop-arg-id ... process-outer-seqs body* guard)))])
-                   ;; outer check
-                   (and outer-check ...)
-                   ;; loop bindings
-                   ([loop-id loop-expr] ... ...
-                    [i-loop-id*** '()] ...
-                    [id1* #f] ...
-                    [i-outer-id #f] ... ... ...
-                    [ids-ok #f])
-                   ;; pos check
-                   guard
-                   ;; inner bindings
-                   ([(i-loop-id** ... loop-id* ... ok id ... id1* ... i-outer-id ... ... ... ids-ok)
-                     (let ([loop-arg-id (lambda (loop-id ... ...) (lambda (inner-id ... ... ...) loop-arg**))] ...)
-                       (let loop ([loop-id loop-id] ... ...
-                                  [i-loop-id*** i-loop-id***] ...
-                                  [id1* id1*] ...
-                                  [i-outer-id i-outer-id] ... ... ...
-                                  [ids-ok ids-ok])
-                         (cond
-                           [ids-ok
-                            (let-values ([(i-loop-id ... ...) (values i-loop-id*** ...)])
-                              (cond
-                                [(and i-pos-guard ...)
-                                 (let-values ([(i-inner-id ...) i-inner-rhs] ... ...)
-                                   (if (and i-pre-guard ...
-                                            i-post-guard ...)
-                                       (if (and guard-expr2 ...)
-                                           (let-values ([(id ...) (body* id1* ... id2 ... ...)])
-                                             (values i-loop-arg* ... loop-id ... ... #t
-                                                     id ... id1* ... i-outer-id ... ... ... ids-ok))
-                                           (loop loop-id ... ... i-loop-arg* ... id1* ... i-outer-id ... ... ... #t))
-                                       ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)))]
-                                [else
-                                 ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)]))]
-                           [else
-                            ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)])))])
-                   ;; pre guard
-                   ok
-                   ;; post guard
-                   ok
-                   ;; loop args
-                   (loop-id* ... i-loop-id** ... id1* ... i-outer-id ... ... ... ids-ok))]))]
-           [else (raise-syntax-error #f "bad syntax" #'(estx1 estx2))]))]
+         (do/sequence-transformer-helper stx #'(estx1 estx2)))]
       [[(id:id ...) (_ ([(id*:id ...) seq-expr:expr] ...
-                        (~seq #:when guard-expr:expr) ...
-                        clause:do/seq-clause ...)
+                        (~seq #:when guard-expr:expr) ... . rest)
                       body:expr ...+)]
-       (do/sequence-transformer
-        (with-syntax ([(id** ...) (for*/list ([ids (in-list (attribute clause.ids-being-bound))]
-                                              [id  (in-list ids)])
-                                    id)])
-          #'[(id ...) (do/sequence ([(id* ...) seq-expr] ...
-                                    #:when guard-expr ...
-                                    [(id** ...) (do/sequence (clause ...)
-                                                             (values id** ...))])
-                                   body ...)]))]
-      [_ #f])))
+       (syntax-parse #'rest
+         [(clause:do/seq-clause ...)
+          (with-syntax* ([estx1 (map (lambda (bind-clause)
+                                       (expand-for-clause stx bind-clause))
+                                     (syntax->list #'([(id* ...) seq-expr] ...)))]
+                         [(id** ...) (for*/list ([ids (in-list (attribute clause.ids-being-bound))]
+                                                 [id  (in-list ids)])
+                                       id)]
+                         [rest-stx (do/sequence-transformer #'[(id** ...)
+                                                               (do/sequence rest
+                                                                 (values id** ...))])]
+                         [estx2 (syntax-parse #'rest-stx
+                                  [[(id ...) (_ . rest)]
+                                   #'rest])]
+                         [stx* #'[(id ...) (do/sequence ([(id* ...) seq-expr] ...
+                                                         #:when guard-expr ...
+                                                         [(id** ...) (do/sequence rest
+                                                                       (values id** ...))])
+                                             body ...)]])
+            (do/sequence-transformer-helper #'stx* #'(estx1 (estx2))))])]
+      [_ #f]))
+
+(define (do/sequence-transformer-helper orig-stx stx)
+  (syntax-parse orig-stx
+    [[(id:id ...) (_ ((~seq #:when guard-expr:expr) ...
+                      [(id1:id ...) outer-seq-expr:expr] ...+ (~seq #:when guard-expr1:expr) ...+
+                      [(id2:id ...) inner-seq-expr:expr] ...+ (~seq #:when guard-expr2:expr) ...)
+                      body ...+)]
+     (syntax-case stx ()
+       [(((([(outer-id ...) outer-rhs] ...)
+           outer-check
+           ([loop-id loop-expr] ...)
+           pos-guard
+           ([(inner-id ...) inner-rhs] ...)
+           pre-guard
+           post-guard
+           (loop-arg ...)) ...)
+             
+         ((([(i-outer-id ...) i-outer-rhs] ...)
+           i-outer-check
+           ([i-loop-id i-loop-expr] ...)
+           i-pos-guard
+           ([(i-inner-id ...) i-inner-rhs] ...)
+           i-pre-guard
+           i-post-guard
+           (i-loop-arg ...)) ...))
+        ;; ==>
+        (with-syntax* ([(loop-id* ...) (generate-temporaries #'(loop-id ... ...))]
+                       [(loop-arg-id ...) (generate-temporaries #'(loop-arg ... ...))]
+                       [(loop-arg* ...) #'(((loop-arg-id loop-id ... ...) inner-id ... ... ...) ...)]
+                       [(loop-arg** ...) (syntax->list #'(loop-arg ... ...))]
+                       [(false* ...) (build-list
+                                      (length (syntax->list #'(i-loop-id ... ... loop-id ... ...)))
+                                      (lambda (x) #'#f))]
+                       [(id-false ...) (build-list
+                                        (length (syntax->list #'(id ...)))
+                                        (lambda (x) #'#f))]
+                       [(i-outer-id-id1-false ...) (build-list
+                                                    (length (syntax->list #'(id1 ... ... i-outer-id ... ... ...)))
+                                                    (lambda (x) #'#f))]
+                       [(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok
+                         process-outer-seqs)
+                        (generate-temporaries #'(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids1-ok
+                                                 process-outer-seqs))]
+                       [pos-guard-id* #'((pos-guard-id outer-id ... ... ...) loop-id ... ...)]
+                       [(empty ...) (build-list
+                                     (length (syntax->list #'(i-loop-id ... ...)))
+                                     (lambda (x) #''()))]
+                       [(i-loop-id* ...) (generate-temporaries #'(i-loop-id ... ...))]
+                       [(i-loop-id** ...) (generate-temporaries #'(i-loop-id ... ...))]
+                       [(i-loop-id*** ...) (generate-temporaries #'(i-loop-id ... ...))]
+                       [(i-loop-arg-id ...) (generate-temporaries #'(i-loop-arg ... ...))]
+                       [(i-loop-arg* ...)
+                        #'((((i-loop-arg-id i-outer-id ... ... ...) i-loop-id ... ...) i-inner-id ... ... ...) ...)]
+                       [(i-loop-arg** ...) (syntax->list #'(i-loop-arg ... ...))]
+                       [i-outer-check* #'(i-outer-check-id i-outer-id ... ... ...)]
+                       [(loop*) (generate-temporaries #'(loop*))]
+                       [(body*) (generate-temporaries #'(body*))]
+                       [(id1* ...) (generate-temporaries #'(id1 ... ...))]
+                       [(i-outer-id* ...) (generate-temporaries #'(i-outer-id ... ... ...))]
+                       [(guard) (generate-temporaries #'(guard))])
+          (for-clause-syntax-protect
+           #'[(id ...)
+              (:do-in
+               ;; outer bindings
+               ([(outer-id ... ... ... pos-guard-id i-outer-check-id
+                           i-loop-arg-id ... process-outer-seqs body* guard)
+                 (let-values ([(outer-id ...) outer-rhs] ... ...
+                              [(pos-guard-id) (lambda (outer-id ... ... ...)
+                                                (lambda (loop-id ... ...) (and pos-guard ...)))]
+                              [(i-outer-check-id) (lambda (i-outer-id ... ... ...) (and i-outer-check ...))]
+                              [(i-loop-arg-id) (lambda (i-outer-id ... ... ...)
+                                                 (lambda (i-loop-id ... ...)
+                                                   (lambda (i-inner-id ... ... ...) i-loop-arg**)))] ...
+                              [(body*) (lambda (id1 ... ... id2 ... ...) body ...)]
+                              [(guard) (and guard-expr ...)])
+                   (let ([process-outer-seqs
+                          (lambda (outer-id ... ... ...)
+                            (lambda (loop-id ... ... loop* loop-arg-id ...)
+                              (if pos-guard-id*
+                                  (let-values ([(inner-id ...) inner-rhs] ... ...)
+                                    (if (and pre-guard ...
+                                             post-guard ...)
+                                        (if (and guard-expr1 ...)
+                                            (let-values ([(i-outer-id ...) i-outer-rhs] ... ...)
+                                              i-outer-check*
+                                              (loop* loop-arg* ... i-loop-expr ... ...
+                                                     id1 ... ... i-outer-id ... ... ... #t))
+                                            (loop* loop-arg* ... empty ... i-outer-id-id1-false ... #f))
+                                        (values false* ... #f id-false ... i-outer-id-id1-false ... #f)))
+                                  (values false* ... #f id-false ... i-outer-id-id1-false ... #f))))])
+                     (values outer-id ... ... ... pos-guard-id i-outer-check-id
+                             i-loop-arg-id ... process-outer-seqs body* guard)))])
+               ;; outer check
+               (and outer-check ...)
+               ;; loop bindings
+               ([loop-id loop-expr] ... ...
+                [i-loop-id*** '()] ...
+                [id1* #f] ...
+                [i-outer-id* #f] ...
+                [ids-ok #f])
+               ;; pos check
+               guard
+               ;; inner bindings
+               ([(i-loop-id** ... loop-id* ... ok id ... id1* ... i-outer-id* ... ids-ok)
+                 (let ([loop-arg-id (lambda (loop-id ... ...) (lambda (inner-id ... ... ...) loop-arg**))] ...)
+                   (let loop ([loop-id loop-id] ... ...
+                              [i-loop-id*** i-loop-id***] ...
+                              [id1* id1*] ...
+                              [i-outer-id* i-outer-id*] ...
+                              [ids-ok ids-ok])
+                     (cond
+                       [ids-ok
+                        (let-values ([(i-outer-id ... ... ...) (values i-outer-id* ...)])
+                          (let-values ([(i-loop-id ... ...) (values i-loop-id*** ...)])
+                            (cond
+                              [(and i-pos-guard ...)
+                               (let-values ([(i-inner-id ...) i-inner-rhs] ... ...)
+                                 (if (and i-pre-guard ...
+                                          i-post-guard ...)
+                                     (if (and guard-expr2 ...)
+                                         (let-values ([(id ...) (body* id1* ... id2 ... ...)])
+                                           (values i-loop-arg* ... loop-id ... ... #t
+                                                   id ... id1* ... i-outer-id* ... ids-ok))
+                                         (loop loop-id ... ... i-loop-arg* ... id1* ... i-outer-id* ... #t))
+                                     ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)))]
+                              [else
+                               ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)])))]
+                       [else
+                        ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)])))])
+               ;; pre guard
+               ok
+               ;; post guard
+               ok
+               ;; loop args
+               (loop-id* ... i-loop-id** ... id1* ... i-outer-id* ... ids-ok))]))]
+       [else (raise-syntax-error #f "bad syntax" stx)])])))
 
 (define-sequence-syntax do/sequence
   (lambda () #'for/list)
   (lambda (stx) (do/sequence-transformer stx)))
-
-#;(define-sequence-syntax do/sequence*
-  (lambda () #'for/list)
-  (lambda (stx) (do/sequence-transformer stx)))
-
-#;(define-syntax (do/sequence stx)
-  (syntax-parse stx
-    [(_ ([(id1:id ...) seq-expr1:expr] ...+
-         (~seq #:when guard-expr1:expr) ...+
-         [(id2:id ...) seq-expr2:expr] ...+
-         (~seq #:when guard-expr2:expr) ...+
-         clause:do/seq-clause ...+)
-       body:expr ...+)
-     (with-syntax ([(id** ...) (for*/list ([ids (in-list (attribute clause.ids-being-bound))]
-                                           [id  (in-list ids)])
-                                 id)])
-       #'(do/sequence* ([(id1 ...) seq-expr1] ...
-                        #:when guard-expr1 ...
-                        [(id2 ... ... id** ...) (do/sequence* ([(id2 ...) seq-expr2] ...
-                                                               #:when guard-expr2 ...
-                                                               clause ...)
-                                                  (values id2 ... ... id** ...))])
-           body ...))]
-    [(_ (clause:do/seq-clause ...+)
-       body:expr ...+)
-     #'(do/sequence* (clause ...)
-         body ...)]))
 
 ;; ----------
 
@@ -346,31 +340,31 @@
                         x)])
   (println y))
 
-#;(for ([x (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                ((1 2) (2 4))
-                                                ((1 2) (3 4) (6 8) (4 2))))]
-                       [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                ((1 2) (9 4))
-                                                ((1 2) (3 4) (8 6) (7 2))))]
-                       #:when (odd? (caadr outer-lst1))
-                       #:when (odd? (caadr outer-lst2))
-                       [(inner-lst1) (in-list outer-lst1)]
-                       [(inner-lst2) (in-list outer-lst2)]
-                       #:when (and (pair? inner-lst1) (even? (car inner-lst1)))
-                       #:when (and (pair? inner-lst2) (even? (car inner-lst2))))
-           (list inner-lst1 inner-lst2))])
-  (println x))
+#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         #:when (odd? (caadr outer-lst1))
+                         [(inner-lst) (in-list outer-lst1)]
+                         #:when (and (pair? inner-lst) (odd? (car inner-lst)))
+                         [(x) (in-list inner-lst)]
+                         #:when (odd? x))
+             (list x outer-lst2))])
+  (println y))
 
-#;(for ([(x outer-lst2) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                             ((1 2) (2 4))
-                                                             ((1 2) (3 4))))]
-                                    [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                             ((1 2) (2 4))
-                                                             ((1 2) (3 4))))]
-                                    #:when (odd? (caadr outer-lst1))
-                                    [(inner-lst) (in-list outer-lst1)]
-                                    #:when (and (pair? inner-lst) (odd? (car inner-lst)))
-                                    [(x) (in-list inner-lst)]
-                                    #:when (odd? x))
-                                   (values x outer-lst2))])
-  (println (list x outer-lst2)))
+#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         #:when (odd? (caadr outer-lst1))
+                         [(inner-lst x) (do/sequence ([(inner-lst) (in-list outer-lst1)]
+                                            #:when (and (pair? inner-lst) (odd? (car inner-lst)))
+                                            [(x) (in-list inner-lst)]
+                                            #:when (odd? x))
+                                (values inner-lst x))])
+             (list x outer-lst2))])
+  (println y))
