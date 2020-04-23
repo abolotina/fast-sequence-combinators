@@ -7,10 +7,18 @@
 (provide do/sequence)
 
 (begin-for-syntax
+  (define-syntax-class bind-clause
+    (pattern [(id1:id ...) seq:expr])
+    (pattern [id:id seq:expr]
+             #:with (id1 ...) #'(id)))
+
+  (define-splicing-syntax-class when-clause
+    (pattern (~seq #:when guard-expr:expr)))
+  
   (define-splicing-syntax-class do/seq-clause
-    (pattern [(id:id ...) seq:expr]
-             #:attr ids-being-bound (syntax->list #'(id ...)))
-    (pattern (~seq #:when guard-expr:expr)
+    (pattern clause:bind-clause
+             #:attr ids-being-bound (syntax->list #'(clause.id1 ...)))
+    (pattern clause:when-clause
              #:attr ids-being-bound '()))
 
   ;; do/sequence-transformer : Syntax[[(id:id ...) (do/sequence (clause:do/seq-clause ...) body:expr ...+)]] ->
@@ -20,17 +28,17 @@
       [[(id:id ...) (_ () body:expr ...+)]
        (for-clause-syntax-protect
         #'[(id ...) (:do-in () #t () #f () #f #f ())])]
-      [[(id:id ...) (_ ((~seq #:when guard-expr:expr) ...+) body:expr ...+)]
+      [[(id:id ...) (_ (clause:when-clause ...+) body:expr ...+)]
        (for-clause-syntax-protect
         #'[(id ...)
-           (:do-in ([(id ...) (begin body ...)]) #t () #t () (and guard-expr ...) #f ())])]
-      [[(id:id ...) (_ ((~seq #:when guard-expr1:expr) ...
-                        [(id*:id ...) seq-expr:expr] ...+
-                        (~seq #:when guard-expr2:expr) ...)
+           (:do-in ([(id ...) (begin body ...)]) #t () #t () (and clause.guard-expr ...) #f ())])]
+      [[(id:id ...) (_ (w-clause1:when-clause ...
+                        b-clause:bind-clause ...+
+                        w-clause2:when-clause ...)
                       body:expr ...+)]
        (with-syntax* ([estx (map (lambda (bind-clause)
                                    (expand-for-clause stx bind-clause))
-                                 (syntax->list #'([(id* ...) seq-expr] ...)))])
+                                 (syntax->list #'([(b-clause.id1 ...) b-clause.seq] ...)))])
          (syntax-case #'estx ()
            [((([(outer-id ...) outer-rhs] ...)
               outer-check
@@ -59,8 +67,8 @@
                   (:do-in
                    ;; outer bindings
                    ([(outer-id ...) outer-rhs] ... ...
-                    [(body*) (lambda (id* ... ...) body ...)]
-                    [(guard) (and guard-expr1 ...)])
+                    [(body*) (lambda (b-clause.id1 ... ...) body ...)]
+                    [(guard) (and w-clause1.guard-expr ...)])
                    ;; outer check
                    (and outer-check ...)
                    ;; loop bindings
@@ -76,8 +84,8 @@
                              (let-values ([(inner-id ...) inner-rhs] ... ...)
                                (if (and pre-guard ...
                                         post-guard*)
-                                   (if (and guard-expr2 ...)
-                                       (let-values ([(id ...) (body* id* ... ...)])
+                                   (if (and w-clause2.guard-expr ...)
+                                       (let-values ([(id ...) (body* b-clause.id1 ... ...)])
                                          (values loop-arg* ... #t id ... (and post-guard ...)))
                                        (if (and post-guard ...)
                                            (loop loop-arg* ...)
@@ -91,25 +99,25 @@
                    ;; loop args
                    (loop-id* ... post-guard*))]))]
            [else (raise-syntax-error #f "bad syntax" #'estx)]))]
-      [[(id:id ...) (_ ((~seq #:when guard-expr:expr) ...
-                        [(id1:id ...) outer-seq-expr:expr] ...+ (~seq #:when guard-expr1:expr) ...+
-                        [(id2:id ...) inner-seq-expr:expr] ...+ (~seq #:when guard-expr2:expr) ...)
+      [[(id:id ...) (_ (w-clause:when-clause ...
+                        b-clause1:bind-clause ...+ w-clause1:when-clause ...+
+                        b-clause2:bind-clause ...+ w-clause2:when-clause ...)
                       body ...+)]
        (with-syntax* ([estx1 (map (lambda (bind-clause)
                                     (expand-for-clause stx bind-clause))
-                                  (syntax->list #'([(id1 ...) outer-seq-expr] ...)))]
+                                  (syntax->list #'([(b-clause1.id1 ...) b-clause1.seq] ...)))]
                       [estx2 (map (lambda (bind-clause)
                                     (expand-for-clause stx bind-clause))
-                                  (syntax->list #'([(id2 ...) inner-seq-expr] ...)))])
+                                  (syntax->list #'([(b-clause2.id1 ...) b-clause2.seq] ...)))])
          (do/sequence-transformer-helper stx #'(estx1 estx2)))]
-      [[(id:id ...) (_ ([(id*:id ...) seq-expr:expr] ...
-                        (~seq #:when guard-expr:expr) ... . rest)
+      [[(id:id ...) (_ (b-clause:bind-clause ...
+                        w-clause:when-clause ... . rest)
                       body:expr ...+)]
        (syntax-parse #'rest
          [(clause:do/seq-clause ...)
           (with-syntax* ([estx1 (map (lambda (bind-clause)
                                        (expand-for-clause stx bind-clause))
-                                     (syntax->list #'([(id* ...) seq-expr] ...)))]
+                                     (syntax->list #'([(b-clause.id1 ...) b-clause.seq] ...)))]
                          [(id** ...) (for*/list ([ids (in-list (attribute clause.ids-being-bound))]
                                                  [id  (in-list ids)])
                                        id)]
@@ -119,8 +127,8 @@
                          [estx2 (syntax-parse #'rest-stx
                                   [[(id ...) (_ . rest)]
                                    #'rest])]
-                         [stx* #'[(id ...) (do/sequence ([(id* ...) seq-expr] ...
-                                                         #:when guard-expr ...
+                         [stx* #'[(id ...) (do/sequence ([(b-clause.id1 ...) b-clause.seq] ...
+                                                         #:when w-clause.guard-expr ...
                                                          [(id** ...) (do/sequence rest
                                                                        (values id** ...))])
                                              body ...)]])
@@ -129,9 +137,9 @@
 
 (define (do/sequence-transformer-helper orig-stx stx)
   (syntax-parse orig-stx
-    [[(id:id ...) (_ ((~seq #:when guard-expr:expr) ...
-                      [(id1:id ...) outer-seq-expr:expr] ...+ (~seq #:when guard-expr1:expr) ...+
-                      [(id2:id ...) inner-seq-expr:expr] ...+ (~seq #:when guard-expr2:expr) ...)
+    [[(id:id ...) (_ (w-clause:when-clause ...
+                      b-clause1:bind-clause ...+ w-clause1:when-clause ...+
+                      b-clause2:bind-clause ...+ w-clause2:when-clause ...)
                       body ...+)]
      (syntax-case stx ()
        [(((([(outer-id ...) outer-rhs] ...)
@@ -163,7 +171,7 @@
                                         (length (syntax->list #'(id ...)))
                                         (lambda (x) #'#f))]
                        [(i-outer-id-id1-false ...) (build-list
-                                                    (length (syntax->list #'(id1 ... ... i-outer-id ... ... ...)))
+                                                    (length (syntax->list #'(b-clause1.id1 ... ... i-outer-id ... ... ...)))
                                                     (lambda (x) #'#f))]
                        [(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok
                          process-outer-seqs)
@@ -183,7 +191,7 @@
                        [i-outer-check* #'(i-outer-check-id i-outer-id ... ... ...)]
                        [(loop*) (generate-temporaries #'(loop*))]
                        [(body*) (generate-temporaries #'(body*))]
-                       [(id1* ...) (generate-temporaries #'(id1 ... ...))]
+                       [(b-clause1-id* ...) (generate-temporaries #'(b-clause1.id1 ... ...))]
                        [(i-outer-id* ...) (generate-temporaries #'(i-outer-id ... ... ...))]
                        [(guard) (generate-temporaries #'(guard))]
                        [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))])
@@ -200,8 +208,8 @@
                               [(i-loop-arg-id) (lambda (i-outer-id ... ... ...)
                                                  (lambda (i-loop-id ... ...)
                                                    (lambda (i-inner-id ... ... ...) i-loop-arg**)))] ...
-                              [(body*) (lambda (id1 ... ... id2 ... ...) body ...)]
-                              [(guard) (and guard-expr ...)])
+                              [(body*) (lambda (b-clause1.id1 ... ... b-clause2.id1 ... ...) body ...)]
+                              [(guard) (and w-clause.guard-expr ...)])
                    (let ([process-outer-seqs
                           (lambda (outer-id ... ... ...)
                             (lambda (loop-id ... ... loop* loop-arg-id ... post-guard*)
@@ -209,11 +217,11 @@
                                   (let-values ([(inner-id ...) inner-rhs] ... ...)
                                     (if (and pre-guard ...
                                              post-guard*)
-                                        (if (and guard-expr1 ...)
+                                        (if (and w-clause1.guard-expr ...)
                                             (let-values ([(i-outer-id ...) i-outer-rhs] ... ...)
                                               i-outer-check*
                                               (loop* loop-arg* ... i-loop-expr ... ...
-                                                     id1 ... ... i-outer-id ... ... ... #t (and post-guard ...) #t))
+                                                     b-clause1.id1 ... ... i-outer-id ... ... ... #t (and post-guard ...) #t))
                                             (loop* loop-arg* ... empty ...
                                                    i-outer-id-id1-false ... #f (and post-guard ...) #t))
                                         (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f)))
@@ -225,7 +233,7 @@
                ;; loop bindings
                ([loop-id loop-expr] ... ...
                 [i-loop-id*** '()] ...
-                [id1* #f] ...
+                [b-clause1-id* #f] ...
                 [i-outer-id* #f] ...
                 [ids-ok #f]
                 [post-guard* #t]
@@ -233,11 +241,11 @@
                ;; pos check
                guard
                ;; inner bindings
-               ([(i-loop-id** ... loop-id* ... ok id ... id1* ... i-outer-id* ... ids-ok post-guard* i-post-guard*)
+               ([(i-loop-id** ... loop-id* ... ok id ... b-clause1-id* ... i-outer-id* ... ids-ok post-guard* i-post-guard*)
                  (let ([loop-arg-id (lambda (loop-id ... ...) (lambda (inner-id ... ... ...) loop-arg**))] ...)
                    (let loop ([loop-id loop-id] ... ...
                               [i-loop-id*** i-loop-id***] ...
-                              [id1* id1*] ...
+                              [b-clause1-id* b-clause1-id*] ...
                               [i-outer-id* i-outer-id*] ...
                               [ids-ok ids-ok]
                               [post-guard* post-guard*]
@@ -251,14 +259,14 @@
                                (let-values ([(i-inner-id ...) i-inner-rhs] ... ...)
                                  (if (and i-pre-guard ...
                                           i-post-guard*)
-                                     (if (and guard-expr2 ...)
-                                         (let-values ([(id ...) (body* id1* ... id2 ... ...)])
+                                     (if (and w-clause2.guard-expr ...)
+                                         (let-values ([(id ...) (body* b-clause1-id* ... b-clause2.id1 ... ...)])
                                            (values i-loop-arg* ... loop-id ... ... #t
-                                                   id ... id1* ... i-outer-id* ... ids-ok
+                                                   id ... b-clause1-id* ... i-outer-id* ... ids-ok
                                                    post-guard* (and i-post-guard ...)))
                                          (if (and i-post-guard ...)
                                              (loop loop-id ... ... i-loop-arg* ...
-                                                   id1* ... i-outer-id* ... #t post-guard* (and i-post-guard ...))
+                                                   b-clause1-id* ... i-outer-id* ... #t post-guard* (and i-post-guard ...))
                                              ((process-outer-seqs outer-id ... ... ...)
                                               loop-id ... ... loop loop-arg-id ... post-guard*)))
                                      ((process-outer-seqs outer-id ... ... ...)
@@ -274,7 +282,7 @@
                ;; post guard
                ok
                ;; loop args
-               (loop-id* ... i-loop-id** ... id1* ... i-outer-id* ... ids-ok post-guard* i-post-guard*))]))]
+               (loop-id* ... i-loop-id** ... b-clause1-id* ... i-outer-id* ... ids-ok post-guard* i-post-guard*))]))]
        [else (raise-syntax-error #f "bad syntax" stx)])])))
 
 (define-sequence-syntax do/sequence
@@ -292,7 +300,7 @@
 #;(for ([(x) (do/sequence (#:when #f) 1)])
   (println x))
 
-#;(for ([(x) (do/sequence ([(x) (in-list '(1 2 3 4 5))] #:when (odd? x)) x)])
+#;(for ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))] #:when (odd? x)) x)])
   (println x))
 
 #;(for ([(x y) (do/sequence (#:when #t
@@ -302,8 +310,8 @@
   (println (list x y)))
 
 #;(for ([(x y) (do/sequence (#:when #t
-                           [(x) (in-list '(1 2 3 4 5))]
-                           [(y) (in-list '(#\A #\B #\c #\d #\e))]
+                           [x (in-list '(1 2 3 4 5))]
+                           [y (in-list '(#\A #\B #\c #\d #\e))]
                            #:when (odd? x)
                            #:when (char-upper-case? y))
              (values x y))])
@@ -398,7 +406,7 @@
                          #:when (and (pair? inner-lst) (odd? (car inner-lst)))
                          [(x) (in-list inner-lst)]
                          #:when (odd? x)
-                         [(z) (in-value x)])
+                         [z (in-value x)])
              (list x z outer-lst2))])
   (println y))
 
