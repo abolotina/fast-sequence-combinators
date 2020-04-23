@@ -52,7 +52,8 @@
                                             (length (syntax->list #'(id ...)))
                                             (lambda (x) #'#f))]
                            [(body*) (generate-temporaries #'(body*))]
-                           [(guard) (generate-temporaries #'(guard))])
+                           [(guard) (generate-temporaries #'(guard))]
+                           [(post-guard*) (generate-temporaries #'(post-guard*))])
               (for-clause-syntax-protect
                #'[(id ...)
                   (:do-in
@@ -63,29 +64,32 @@
                    ;; outer check
                    (and outer-check ...)
                    ;; loop bindings
-                   ([loop-id loop-expr] ... ...)
+                   ([loop-id loop-expr] ... ...
+                    [post-guard* #t])
                    ;; pos check
                    guard
                    ;; inner bindings
-                   ([(loop-id* ... ok id ...)
+                   ([(loop-id* ... ok id ... post-guard*)
                      (let ([loop-arg-id (lambda (loop-id ... ...) (lambda (inner-id ... ... ...) loop-arg**))] ...)
                        (let loop ([loop-id loop-id] ... ...)
                          (if (and pos-guard ...)
                              (let-values ([(inner-id ...) inner-rhs] ... ...)
                                (if (and pre-guard ...
-                                        post-guard ...)
+                                        post-guard*)
                                    (if (and guard-expr2 ...)
                                        (let-values ([(id ...) (body* id* ... ...)])
-                                         (values loop-arg* ... #t id ...))
-                                       (loop loop-arg* ...))
-                                   (values loop-arg* ... #f id-false ...)))
-                             (values false* ... #f id-false ...))))])
+                                         (values loop-arg* ... #t id ... (and post-guard ...)))
+                                       (if (and post-guard ...)
+                                           (loop loop-arg* ...)
+                                           (values false* ... #f id-false ... #f)))
+                                   (values false* ... #f id-false ... #f)))
+                             (values false* ... #f id-false ... #f))))])
                    ;; pre guard
                    ok
                    ;; post guard
                    ok
                    ;; loop args
-                   (loop-id* ...))]))]
+                   (loop-id* ... post-guard*))]))]
            [else (raise-syntax-error #f "bad syntax" #'estx)]))]
       [[(id:id ...) (_ ((~seq #:when guard-expr:expr) ...
                         [(id1:id ...) outer-seq-expr:expr] ...+ (~seq #:when guard-expr1:expr) ...+
@@ -181,7 +185,8 @@
                        [(body*) (generate-temporaries #'(body*))]
                        [(id1* ...) (generate-temporaries #'(id1 ... ...))]
                        [(i-outer-id* ...) (generate-temporaries #'(i-outer-id ... ... ...))]
-                       [(guard) (generate-temporaries #'(guard))])
+                       [(guard) (generate-temporaries #'(guard))]
+                       [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))])
           (for-clause-syntax-protect
            #'[(id ...)
               (:do-in
@@ -199,19 +204,20 @@
                               [(guard) (and guard-expr ...)])
                    (let ([process-outer-seqs
                           (lambda (outer-id ... ... ...)
-                            (lambda (loop-id ... ... loop* loop-arg-id ...)
+                            (lambda (loop-id ... ... loop* loop-arg-id ... post-guard*)
                               (if pos-guard-id*
                                   (let-values ([(inner-id ...) inner-rhs] ... ...)
                                     (if (and pre-guard ...
-                                             post-guard ...)
+                                             post-guard*)
                                         (if (and guard-expr1 ...)
                                             (let-values ([(i-outer-id ...) i-outer-rhs] ... ...)
                                               i-outer-check*
                                               (loop* loop-arg* ... i-loop-expr ... ...
-                                                     id1 ... ... i-outer-id ... ... ... #t))
-                                            (loop* loop-arg* ... empty ... i-outer-id-id1-false ... #f))
-                                        (values false* ... #f id-false ... i-outer-id-id1-false ... #f)))
-                                  (values false* ... #f id-false ... i-outer-id-id1-false ... #f))))])
+                                                     id1 ... ... i-outer-id ... ... ... #t (and post-guard ...) #t))
+                                            (loop* loop-arg* ... empty ...
+                                                   i-outer-id-id1-false ... #f (and post-guard ...) #t))
+                                        (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f)))
+                                  (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f))))])
                      (values outer-id ... ... ... pos-guard-id i-outer-check-id
                              i-loop-arg-id ... process-outer-seqs body* guard)))])
                ;; outer check
@@ -221,17 +227,21 @@
                 [i-loop-id*** '()] ...
                 [id1* #f] ...
                 [i-outer-id* #f] ...
-                [ids-ok #f])
+                [ids-ok #f]
+                [post-guard* #t]
+                [i-post-guard* #t])
                ;; pos check
                guard
                ;; inner bindings
-               ([(i-loop-id** ... loop-id* ... ok id ... id1* ... i-outer-id* ... ids-ok)
+               ([(i-loop-id** ... loop-id* ... ok id ... id1* ... i-outer-id* ... ids-ok post-guard* i-post-guard*)
                  (let ([loop-arg-id (lambda (loop-id ... ...) (lambda (inner-id ... ... ...) loop-arg**))] ...)
                    (let loop ([loop-id loop-id] ... ...
                               [i-loop-id*** i-loop-id***] ...
                               [id1* id1*] ...
                               [i-outer-id* i-outer-id*] ...
-                              [ids-ok ids-ok])
+                              [ids-ok ids-ok]
+                              [post-guard* post-guard*]
+                              [i-post-guard* i-post-guard*])
                      (cond
                        [ids-ok
                         (let-values ([(i-outer-id ... ... ...) (values i-outer-id* ...)])
@@ -240,23 +250,31 @@
                               [(and i-pos-guard ...)
                                (let-values ([(i-inner-id ...) i-inner-rhs] ... ...)
                                  (if (and i-pre-guard ...
-                                          i-post-guard ...)
+                                          i-post-guard*)
                                      (if (and guard-expr2 ...)
                                          (let-values ([(id ...) (body* id1* ... id2 ... ...)])
                                            (values i-loop-arg* ... loop-id ... ... #t
-                                                   id ... id1* ... i-outer-id* ... ids-ok))
-                                         (loop loop-id ... ... i-loop-arg* ... id1* ... i-outer-id* ... #t))
-                                     ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)))]
+                                                   id ... id1* ... i-outer-id* ... ids-ok
+                                                   post-guard* (and i-post-guard ...)))
+                                         (if (and i-post-guard ...)
+                                             (loop loop-id ... ... i-loop-arg* ...
+                                                   id1* ... i-outer-id* ... #t post-guard* (and i-post-guard ...))
+                                             ((process-outer-seqs outer-id ... ... ...)
+                                              loop-id ... ... loop loop-arg-id ... post-guard*)))
+                                     ((process-outer-seqs outer-id ... ... ...)
+                                      loop-id ... ... loop loop-arg-id ... post-guard*)))]
                               [else
-                               ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)])))]
+                               ((process-outer-seqs outer-id ... ... ...)
+                                loop-id ... ... loop loop-arg-id ... post-guard*)])))]
                        [else
-                        ((process-outer-seqs outer-id ... ... ...) loop-id ... ... loop loop-arg-id ...)])))])
+                        ((process-outer-seqs outer-id ... ... ...)
+                         loop-id ... ... loop loop-arg-id ... post-guard*)])))])
                ;; pre guard
                ok
                ;; post guard
                ok
                ;; loop args
-               (loop-id* ... i-loop-id** ... id1* ... i-outer-id* ... ids-ok))]))]
+               (loop-id* ... i-loop-id** ... id1* ... i-outer-id* ... ids-ok post-guard* i-post-guard*))]))]
        [else (raise-syntax-error #f "bad syntax" stx)])])))
 
 (define-sequence-syntax do/sequence
@@ -368,3 +386,38 @@
                                 (values inner-lst x))])
              (list x outer-lst2))])
   (println y))
+
+#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         #:when (odd? (caadr outer-lst1))
+                         [(inner-lst) (in-list outer-lst1)]
+                         #:when (and (pair? inner-lst) (odd? (car inner-lst)))
+                         [(x) (in-list inner-lst)]
+                         #:when (odd? x)
+                         [(z) (in-value x)])
+             (list x z outer-lst2))])
+  (println y))
+
+#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
+                                                  ((1 2) (2 4))
+                                                  ((1 2) (3 4))))]
+                         #:when (odd? (caadr outer-lst1))
+                         [(inner-lst x z) (do/sequence ([(inner-lst) (in-list outer-lst1)]
+                                                      #:when (and (pair? inner-lst) (odd? (car inner-lst)))
+                                                      [(x z) (do/sequence ([(x) (in-list inner-lst)]
+                                                                           #:when (odd? x)
+                                                                           [(z) (in-value x)])
+                                                               (values x z))])
+                                          (values inner-lst x z))])
+             (list x z outer-lst2))])
+  (println y))
+
+#;(for ([(x) (do/sequence ([(z) (in-value 1)]) z)])
+  (println x))
