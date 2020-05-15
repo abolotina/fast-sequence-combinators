@@ -4,7 +4,9 @@
                      racket
                      syntax/parse))
 
-(provide do/sequence)
+(provide do/sequence
+         (for-syntax bind-clause
+                     when-clause))
 
 (define-sequence-syntax in-nullary-relation
   (lambda () #'in-nullary-relation/proc)
@@ -45,13 +47,7 @@
 
   (define-splicing-syntax-class when-chunk
     (pattern (~seq w:when-clause ...+)
-             #:with expr #'(and w.guard-expr ...)))
-
-  (define-splicing-syntax-class do/seq-clause
-    (pattern clause:bind-clause
-             #:attr ids-being-bound (syntax->list #'(clause.id1 ...)))
-    (pattern clause:when-clause
-             #:attr ids-being-bound '())))
+             #:with expr #'(and w.guard-expr ...))))
 
 (define-sequence-syntax do/sequence2
   (lambda () #'in-nullary-relation/proc)
