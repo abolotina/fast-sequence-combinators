@@ -1,48 +1,9 @@
 #lang racket
 
-(require (for-syntax racket
-                     syntax/parse
-                     syntax/srcloc)
-         rackunit
-         "do-sequence.rkt")
+(require "fast-sequence-testing.rkt")
 
-(begin-for-syntax
-  (define (rewrite-to-for/list stx)
-    (syntax-parse stx
-      #:literals (do/sequence)
-      [[(id ...) (do/sequence (clause:do/seq-clause ...) body ...)]
-       #'[(id ...) (for/list (clause.rewritten ... ...) body ...)]]
-      [[id (do/sequence (clause:do/seq-clause ...) body ...)]
-       #'[id (for/list (clause.rewritten ... ...) body ...)]]
-      [[(id ...) seq-expr]
-       stx]
-      [[id seq-expr]
-       stx]))
-  
-  (define-splicing-syntax-class do/seq-clause
-    (pattern b:bind-clause
-             #:with (rewritten ...) (list (rewrite-to-for/list #'b)))
-    (pattern w:when-clause
-             #:with (rewritten ...) #'w))
-
-  (define-syntax-class do/seq-test
-    #:literals (for/list)
-    (pattern (for/list (clause:do/seq-clause ...) body ...)
-             #:with rewritten #'(for/list (clause.rewritten ... ...) body ...))))
-
-(define-syntax (test-do/seq* stx)
-  (syntax-parse stx
-    [(_ test:do/seq-test)
-     (with-syntax ([msg (string-append "Test failed at " (source-location->string stx))])
-       #'(check-equal? test test.rewritten msg))]))
-
-(define-syntax (test-do/seq stx)
-  (syntax-parse stx
-    [(_ test:do/seq-test ...)
-     #'(begin (test-do/seq* test) ...)]))
-
-;; ================================================
-;; Tests
+(define x 1)
+(define y 2)
 
 (test-do/seq
 
@@ -186,4 +147,16 @@
 
  (for/list ([(x) (do/sequence ([(z) (in-value 1)]) z)])
    x)
+
+ (for/list ([z (do/sequence ([x (in-list (list (list x y)))]
+                             [() (in-nullary-relation (odd? x))])
+                 x)])
+    z)
 )
+
+#;(define x 1)
+#;(define y 2)
+#;(for ([z (do/sequence ([x (in-list (list (list x y)))]
+                         [() (in-nullary-relation (odd? x))])
+                        x)])
+    (println z))

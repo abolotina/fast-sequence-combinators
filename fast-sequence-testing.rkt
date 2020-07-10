@@ -12,8 +12,10 @@
 (provide exp-for-clause
          test-once
          check-fast-seq-combinators
+         test-do/seq
          (all-from-out "fast-sequence-filter.rkt")
-         (all-from-out "fast-sequence-map.rkt"))
+         (all-from-out "fast-sequence-map.rkt")
+         (all-from-out "do-sequence.rkt"))
 
 (define-syntax (exp-for-clause stx)
   (syntax-case stx ()
@@ -148,3 +150,44 @@
      (with-syntax ([(key ...) (make-keys #'(test ...))])
        #'(begin
            (check-fast-seq-combinators* key test.for-clause ...) ...))]))
+
+;; ================================================
+;; do/sequence
+
+(begin-for-syntax
+  (define (rewrite-to-for/list stx)
+    (syntax-parse stx
+      #:literals (do/sequence)
+      [[(id ...) (do/sequence (clause:do/seq-clause ...) body ...)]
+       #'[(id ...) (for/list (clause.rewritten ... ...) body ...)]]
+      [[id (do/sequence (clause:do/seq-clause ...) body ...)]
+       #'[id (for/list (clause.rewritten ... ...) body ...)]]
+      [[(id ...) seq-expr]
+       stx]
+      [[id seq-expr]
+       stx]))
+  
+  (define-splicing-syntax-class do/seq-clause
+    (pattern b:bind-clause
+             #:with (rewritten ...) (list (rewrite-to-for/list #'b)))
+    (pattern w:when-clause
+             #:with (rewritten ...) #'w))
+
+  (define-syntax-class do/seq-test
+    #:literals (for/list)
+    (pattern (for/list (clause:do/seq-clause ...) body ...)
+             #:with rewritten #'(for/list (clause.rewritten ... ...) body ...)
+             #:with msg (with-syntax ([msg (string-append "Test failed at "
+                                                          (source-location->string
+                                                           this-syntax))])
+                          #'msg))))
+
+(define-syntax (test-do/seq* stx)
+  (syntax-parse stx
+    [(_ test:do/seq-test)
+     #'(check-equal? test test.rewritten test.msg)]))
+
+(define-syntax (test-do/seq stx)
+  (syntax-parse stx
+    [(_ test:do/seq-test ...)
+     #'(begin (test-do/seq* test) ...)]))

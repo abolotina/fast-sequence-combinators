@@ -57,7 +57,7 @@
  (check-fast-seq-combinators [(x) (fast-sequence-filter char-numeric?
                                                         (in-port read-char (open-input-string "a1b2c3")))])
 
- #;(check-fast-seq-combinators [(x) (fast-sequence-map char->integer
+ (check-fast-seq-combinators [(x) (fast-sequence-map char->integer
                                                         (in-port read-char (open-input-string "a1b2c3")))])
  
  (check-fast-seq-combinators [(x) (fast-sequence-filter
@@ -75,7 +75,7 @@
                                      (fast-sequence-map (lambda (x) (values (sqr x) x))
                                                         (in-vector (vector 1 2 4 3 4))))])
 
- #;(check-fast-seq-combinators [(x y) (fast-sequence-map (lambda (x) (values (add1 x) x))
+ (check-fast-seq-combinators [(x y) (fast-sequence-map (lambda (x) (values (add1 x) x))
                                                        (fast-sequence-filter
                                                         odd?
                                                         (fast-sequence-map sqr (in-vector (vector 1 2 4 3 4)))))])

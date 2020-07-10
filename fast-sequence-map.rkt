@@ -24,30 +24,35 @@
               post-guard
               (loop-arg ...)) ...)
             ;; ==>
-            (for-clause-syntax-protect
-             #'[(id ...)
-                (:do-in
-                 ;;outer bindings
-                 ([(outer-id ...) outer-rhs] ... ...)
-                 ;; outer check
-                 (and outer-check ...)
-                 ;; loop bindings
-                 ([loop-id loop-expr] ... ...)
-                 ;; pos check
-                 (and pos-guard ...)
-                 ;; inner bindings
-                 ([(inner-id ... ... ... id ...)
-                   (let*-values ([(inner-id ... ... ...)
-                                  (let-values ([(inner-id ...) inner-rhs] ... ...)
-                                    (values inner-id ... ... ...))]
-                                 [(id ...) (f temp-id ...)])
-                     (values inner-id ... ... ... id ...))])
-                 ;; pre guard
-                 (and pre-guard ...)
-                 ;; post guard
-                 (and post-guard ...)
-                 ;; loop args
-                 (loop-arg ... ...))])]
+            (with-syntax ([(false* ...) (build-list
+                                         (length (syntax->list #'(inner-id ... ... ... id ...)))
+                                         (lambda (x) #'#f))])
+              (for-clause-syntax-protect
+               #'[(id ...)
+                  (:do-in
+                   ;;outer bindings
+                   ([(outer-id ...) outer-rhs] ... ...)
+                   ;; outer check
+                   (and outer-check ...)
+                   ;; loop bindings
+                   ([loop-id loop-expr] ... ...)
+                   ;; pos check
+                   (and pos-guard ...)
+                   ;; inner bindings
+                   ([(inner-id ... ... ... id ... ok)
+                     (let-values ([(inner-id ...) inner-rhs] ... ...)
+                       (cond
+                         [(and pre-guard ...)
+                          (let-values ([(id ...) (f temp-id ...)])
+                            (values inner-id ... ... ... id ... #t))]
+                         [else
+                          (values false* ... #f)]))])
+                   ;; pre guard
+                   ok
+                   ;; post guard
+                   (and post-guard ...)
+                   ;; loop args
+                   (loop-arg ... ...))]))]
            [else (raise-syntax-error #f "bad syntax" #'estx)]
            ))]
       [_ #f])))

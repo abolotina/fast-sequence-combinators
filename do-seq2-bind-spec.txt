@@ -1,0 +1,187 @@
+(define y 10)
+(for/list ([(x) (in-something blah)])
+  (+ x y))
+
+[(x) (in-something blah)] : ECR[base-env][{x:Integer}]
+
+(in-list-tails '(a b c))
+=> [ '(a b c), '(b c), '(c), '() ]
+
+BindingClause[G][{x:t, ...}]
+  ::= [(x:Id ...) Expr[G][(sequenceof (values t ...))]]
+
+Binding specification of an expanded clause record (simplified)
+in an environment G:
+  ECR[G][G'][{outer-id:a, ...}][{loop-id:c, ...}][{inner-id:e,...}]
+::=
+  (;; outer bindings
+   ([(outer-id : Id) outer-rhs : Expr[G][a]])
+   ;; loop bindings
+   ([loop-id : Id loop-expr : Expr[G, outer-id : a][c]])
+   ;; pos check
+   pos-guard : Expr[G, outer-id : a, loop-id : c][Any]
+   ;; inner bindings
+   ([inner-id inner-rhs : Expr[G, outer-id : a, loop-id : c][e]] ...)
+   ;; pre guard
+   pre-guard : Expr[G, outer-id : a, loop-id : c, inner-id : e, ...][Any]
+   ;; post guard
+   post-guard : Expr[G, outer-id : a, loop-id : c, inner-id : e, ...][Any]
+   ;; loop args
+   (loop-arg : Expr[G, outer-id : a, loop-id : c, inner-id : e, ...][c]))
+  where G' = { inner-id : e, ... } WRONG!
+  where G' ⊂ { inner-id : e, ..., loop-id : c, outer-id : a }
+             AND the ECR must not bind anything visible to the loop body
+                 except what is in G' (FIXME!)
+
+Binding specification of an expanded clause record (simplified)
+in an environment G:
+  ECR-ILS[G][G'][other][{outer-id:a, ...}][{loop-id:c, ...}][{inner-id:e,...}]
+::=
+  (;; outer bindings
+   ([(outer-id : Id) outer-rhs : Expr[G][a]])
+   ;; loop bindings
+   ([loop-id : Id loop-expr : Expr[G, outer-id : a, other.outer-id : other.a][c]])
+   ;; pos check
+   pos-guard : Expr[G, outer-id : a,  other.outer-id : other.a, loop-id : c, other.loop-id : other.c][Any]
+   ;; inner bindings
+   ([inner-id inner-rhs : Expr[G, outer-id : a, other.outer-id : other.a, loop-id : c, other.loop-id : other.c][e]] ...)
+   ;; pre guard
+   pre-guard : Expr[G, outer-id : a, other.outer-id : other.a, loop-id : c, other.loop-id : other.c, inner-id : e, ..., other.inner-id : other.e, ...][Any]
+   ;; post guard
+   post-guard : Expr[G, outer-id : a, other.outer-id : other.a, loop-id : c, other.loop-id : other.c, inner-id : e, ..., other.inner-id : other.e, ...][Any]
+   ;; loop args
+   (loop-arg : Expr[G, outer-id : a, other.outer-id : other.a, loop-id : c, other.loop-id : other.c, inner-id : e, ..., other.inner-id : other.e, ...][c]))
+  where G' = { inner-id : e, ... } WRONG!
+  where G' ⊂ { inner-id : e, ..., loop-id : c, outer-id : a }
+             AND the ECR must not bind anything visible to the loop body
+                 except what is in G' (FIXME!)
+
+--
+
+;; A bind-chunk[G][G'] is a maximal, non-empty sequence of binding clauses
+;; whose expressions have base environment G
+;; and G' describes the identifiers (and their types) bound by the clauses
+
+bind-chunk[G][∪{G'}] ::= BindingClause[G][G'] ...+
+
+OLD expand-for-clause    : Syntax BindingClause[G][G'] -> ECR[G][G']
+
+expand-for-clause    : Syntax BindingClause[G][G']
+                    -> ∃(Go,Gl,Gi): ECR[G][G'][Go][Gl][Gi]
+
+-- Is G related to the current expansion environment when
+   expand-for-clause is called? (FIXME?)
+
+merge-clause-records : (Listof ECR[G][G']) -> ECR[G][∪{G'}]
+-- Binding specification of do/sequence2 --
+Binding specification of do/sequence2 in an environment G:
+  ;; For simplicity, we can assume that bind-chunk consists of
+  ;; just one binding clause. For multiple clauses: bind-chunk[G][OuterECR[G] ...]
+
+[(id ...) (do/sequence2 BindChunk[G][G'] Expr[G,G'][(sequenceof (values t ...))])
+  : BindingClause[G][{id:t, ...}]
+
+;; [(x y) (do/sequence2 ([x '(1 2 3)]) (list x (+ x 1)))] NOT ALLOWED!
+
+-- Expansion of do/sequence2 --
+
+[(id ...) (do/sequence2 outer-bind-clause seq-expr)] : BindingClause[G][{id:t, ...}]
+with Outer : ECR[G][G'][Outer.Go = {Outer.outer-id:Outer.a,...}] and so on
+       = (expand-for-clause this-syntax #'outer-bind-clause)
+     Inner : ECR[G,G'][{id:t, ...}] etc
+       = (expand-for-clause this-syntax #'[(id ...) seq-expr])
+=
+  ;; A result must contain at least the following components,
+  ;; and it may contain some additional components if they are needed
+  ;; for an implementation.
+  ;; In the following, the symbol _ is a placeholder for some expression
+  ;; that should be filled in in an actual implementation.
+  [(id ...)
+   (:do-in
+    ;; outer bindings : Outer.Go
+    ([(Outer.outer-id) Outer.outer-rhs]
+     #;[(process-outer)
+      (lambda (Outer.outer-id Outer.loop-id loop*)
+        (let ([Outer.inner-id Outer.inner-rhs] ...)
+          (if Outer.pre-guard
+              ;; Case 2
+              (loop* Inner.outer-id Outer.loop-arg Inner.loop-expr outer-bind-clause.id #t)
+              ;; Case 3
+              (values #f ... #f #f #f #f #f #f))))])
+    ;; loop bindings : Outer.Gl ∪ Inner.Gl ∪ Inner.Go ∪ {inner-is-initialized? : Boolean}
+    ([Outer.loop-id Outer.loop-expr]
+     [Inner.loop-id uninitialized]
+     [Inner.outer-id uninitialized]
+     [inner-is-initialized? #f]
+     [Outer.post-guard* #t]
+     [Inner.post-guard* #t])
+    ;; pos check
+    #t
+    ;; inner bindings : Inner.Gi ∪ Inner.Gl ∪ Inner.Go ∪ Outer.Gl ∪ {inner-is-initialized? : Boolean}
+    ([(id ... Outer.loop-id Outer.inner-id Inner.outer-id Inner.loop-id
+       Outer.post-guard* Inner.post-guard*
+       inner-is-initialized? next-is-found)
+
+      (let ()
+        (define (loop-with-inner Outer.loop-id Outer.inner-id
+                                 Inner.outer-id Inner.loop-id
+                                 Outer.post-guard* Inner.post-guard*)
+          (cond
+            [Inner.pos-guard
+             (let-values ([(Inner.inner-id*) Inner.inner-rhs] ...
+                           [(Inner.pre-guard**)
+                            (lambda (Inner.inner-id) Inner.pre-guard)]
+                           [(Inner.post-guard**)
+                            (lambda (Inner.inner-id) Inner.post-guard)]
+                           [(Inner.loop-arg*)
+                            (lambda (Inner.inner-id) Inner.loop-arg)]
+                           [(id* ...)
+                            (lambda (Inner.inner-id) (values id ...))]) ; Inner.inner-id shadows Outer.inner-id
+               (if (and (Inner.pre-guard** Inner.inner-id*)
+                        Inner.post-guard*)
+                   ;; Case 1
+                   (values (id* Inner.inner-id*) ... Outer.loop-id Outer.inner-id Inner.outer-id
+                           (Inner.loop-arg* Inner.inner-id*)
+                           Outer.post-guard* (Inner.post-guard** Inner.inner-id*)
+                           #t #t)
+                   (loop-without-inner Outer.loop-id Outer.post-guard*)))]
+            [else
+             (loop-without-inner Outer.loop-id Outer.post-guard*)]))
+        (define (loop-without-inner Outer.loop-id Outer.post-guard*)
+          (cond
+            [Outer.pos-guard
+             (let ([Outer.inner-id Outer.inner-rhs] ...)
+               (if (and Outer.pre-guard
+                        Outer.post-guard*)
+                   ;; Case 2
+                   (let* ([Outer.loop-arg* Outer.loop-arg]
+                          [Inner.outer-id Inner.outer-rhs]
+                          [Inner.loop-id Inner.loop-expr])                     
+                     (loop-with-inner Outer.loop-arg* Outer.inner-id ; Outer.loop-arg is in the wrong scope
+                                      Inner.outer-id Inner.loop-id
+                                      Outer.post-guard #t))
+                   (outer-is-done)))]
+            [else
+             (outer-is-done)]))
+        (define (outer-is-done)
+          ;; Case 3
+          (values #f ... #f #f #f #f #f #f #f #f))
+        (cond
+          [inner-is-initialized?
+           (loop-with-inner Outer.loop-id Outer.inner-id
+                            Inner.outer-id Inner.loop-id
+                            Outer.post-guard* Inner.post-guard*)]
+          [else
+           (loop-without-inner Outer.loop-id Outer.post-guard*)])
+        )])
+    ;; pre guard
+    next-is-found
+    ;; post guard
+    next-is-found
+    ;; loop args
+    (Outer.loop-id
+     Inner.loop-id
+     Inner.outer-id
+     inner-is-initialized?
+     Outer.post-guard*
+     Inner.post-guard*))]
