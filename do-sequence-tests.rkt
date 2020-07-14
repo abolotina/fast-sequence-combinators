@@ -81,7 +81,7 @@
                                       x*)])
                    x)])
    y)
-
+#|
  (for/list ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
                                                         ((1 2) (2 4))
                                                         ((1 2) (3 4))))]
@@ -144,7 +144,7 @@
                                [y (in-list x)])
                    (list y outer-lst2))])
    y)
-
+|#
  (for/list ([(x) (do/sequence ([(z) (in-value 1)]) z)])
    x)
 

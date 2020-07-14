@@ -6,10 +6,7 @@
                      syntax/stx
                      #;macro-debugger/emit))
 
-(provide do/sequence
-         in-nullary-relation
-         (for-syntax bind-clause
-                     when-clause))
+(provide do/sequence*)
 
 ;; A helper sequence that contains/represents information
 ;; about a number of iterations: 1 or 0.
@@ -430,23 +427,22 @@
   (define (merge stx)
     (syntax-parse stx
       [(ecr:expanded-clause-record ...)
-       #:with (pecr:expanded-clause-record ...) #'(ecr.protected ...)
        #'(;; outer bindings
-          ([(pecr.outer-id ...) pecr.outer-rhs] ... ...)
+          ([(ecr.outer-id ...) ecr.outer-rhs] ... ...)
           ;; outer check
-          (and pecr.outer-check ...)
+          (and ecr.outer-check ...)
           ;; loop bindings
-          ([pecr.loop-id pecr.loop-expr] ... ...)
+          ([ecr.loop-id ecr.loop-expr] ... ...)
           ;; pos check
-          (and pecr.pos-guard ...)
+          (and ecr.pos-guard ...)
           ;; inner bindings
-          ([(pecr.inner-id ...) pecr.inner-rhs] ... ...)
+          ([(ecr.inner-id ...) ecr.inner-rhs] ... ...)
           ;; pre guard
-          (and pecr.pre-guard ...)
+          (and ecr.pre-guard ...)
           ;; post guard
-          (and pecr.post-guard ...)
+          (and ecr.post-guard ...)
           ;; loop args
-          (pecr.loop-arg ... ...))]))
+          (ecr.loop-arg ... ...))]))
 
   #;(define (merge stx)
     (define result (merge* stx))
@@ -584,7 +580,7 @@
 ;;  maybe it would be better to just raise a syntax error if do/sequence
 ;;  is used as an expression. We could always change it later.
 
-(define-sequence-syntax do/sequence
+(define-sequence-syntax do/sequence*
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
@@ -594,10 +590,10 @@
         #'[(id ...) (:do-in ([(id ...) body ...]) #t () #t () #t #f ())])]
       [[(id:id ...) (_ (w:when-chunk . rest) body:expr ...+)]
        (for-clause-syntax-protect
-        #'[(id ...) (do/sequence2 ([() (in-nullary-relation w.expr)]) (do/sequence rest body ...))])]
+        #'[(id ...) (do/sequence2 ([() (in-nullary-relation w.expr)]) (do/sequence* rest body ...))])]
       [[(id:id ...) (_ (b:bind-chunk . rest) body:expr ...+)]
        (for-clause-syntax-protect
-        #'[(id ...) (do/sequence2 (b.b ...) (do/sequence rest body ...))])]
+        #'[(id ...) (do/sequence2 (b.b ...) (do/sequence* rest body ...))])]
       [_ #f])))
 
 ;; ----------
