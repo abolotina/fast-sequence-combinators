@@ -29,10 +29,10 @@ fast sequences are applications of a sequence constructor, such as @racket[in-ra
 
 For a way of defining new fast sequences, see @racket[define-sequence-syntax].
 
-In contrast, a @italic{slow sequence}—all other sequences, such as applications of @racket[list], @racket[vector],
+A @italic{slow sequence}—all other sequences, such as applications of @racket[list], @racket[vector],
 etc.—provides to the compiler a generic interface for data accession and has lesser performance at run-time.
 
-An @italic{element} of a sequence can be single value or can consist of multiple values.
+An @italic{element} of a sequence can be a single value or it can consist of multiple values.
 
 @section{Motivating Example}
 
@@ -114,8 +114,9 @@ Returns a fast sequence form whose elements are results of applying @racket[f] t
 The number of elements is determined by the length of the shortest @racket[seq-expr]. The number of @racket[seq-expr]s must match the number
 of arguments that @racket[f] accepts, and all the elements of each sequence must be single values.
 
-When used directly in a  @racket[for] loop clause,  @racket[fast-sequence-map] has better performance than @racket[sequence-map] provided by
-@racketmodname[racket/sequence].
+The @racket[fast-sequence-map] form is similar to @racket[sequence-map] provided by @racketmodname[racket/sequence] but it accepts multiple sequence
+expressions, whereas @racket[sequence-map] accepts a single sequence. When used directly in a  @racket[for] loop clause, @racket[fast-sequence-map] has
+better performance than @racket[sequence-map]. The best performance is provided when @racket[seq-expr] is a fast sequence.
 
 @examples[#:eval my-evaluator
           (for/list ([(x) (fast-sequence-map
@@ -134,7 +135,7 @@ When used directly in a  @racket[for] loop clause,  @racket[fast-sequence-map] h
 Returns a fast sequence form whose elements are the elements of @racket[seq-expr] that satisfy the predicate function @racket[pred].
 
 When used directly in a  @racket[for] loop clause,  @racket[fast-sequence-filter] has better performance than @racket[sequence-filter]
-provided by @racketmodname[racket/sequence].
+provided by @racketmodname[racket/sequence]. The best performance is provided when @racket[seq-expr] is a fast sequence.
 
 @examples[#:eval my-evaluator
           (for/list ([c (fast-sequence-filter
@@ -177,6 +178,9 @@ additionally allows iterating over nested sequences.
 
 When @racket[do/sequence] returns a sequence whose elements are all single values, it is equivalent to using @racket[for/list]
 in place of @racket[do/sequence], except that @racket[do/sequence] does not construct a list.
+
+The @racket[do/sequence] form provides the best performance when it is used directly in a @racket[for] loop clause and all
+@racket[seq-expr]s are fast sequences.
 
 @examples[#:eval my-evaluator
           (for/list ([(x) (do/sequence () 13)])

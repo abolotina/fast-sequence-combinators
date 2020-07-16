@@ -8,6 +8,8 @@
 
 (provide do/sequence
          in-nullary-relation
+         in-protect
+         in-merge
          (for-syntax bind-clause
                      when-clause))
 
@@ -454,6 +456,48 @@
     #;(emit-local-step stx result #:id #'for)
     result))
 
+(define-sequence-syntax in-protect
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ seq-expr:expr)]
+       #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
+       #:with pecr:expanded-clause-record #'ecr.protected
+       (for-clause-syntax-protect
+        #'[(id ...)
+           (:do-in
+            ([(pecr.outer-id ...) pecr.outer-rhs] ...)
+            pecr.outer-check
+            ([pecr.loop-id pecr.loop-expr] ...)
+            pecr.pos-guard
+            ([(pecr.inner-id ...) pecr.inner-rhs] ...)
+            pecr.pre-guard
+            pecr.post-guard
+            (pecr.loop-arg ...))])])))
+
+;; Elements of all seq-expr's must be single-valued. Behaves like in-parallel.
+(define-sequence-syntax in-merge
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ seq-expr:expr ...)]
+       #:with (ecr:expanded-clause-record ...) (map (lambda (b-clause) (expand-for-clause stx b-clause))
+                                                    (syntax->list #'([(id) seq-expr] ...)))
+       #:with mecr:expanded-clause-record (merge #'(ecr ...))
+       (for-clause-syntax-protect
+        #'[(id ...)
+           (:do-in
+            ([(mecr.outer-id ...) mecr.outer-rhs] ...)
+            mecr.outer-check
+            ([mecr.loop-id mecr.loop-expr] ...)
+            mecr.pos-guard
+            ([(mecr.inner-id ...) mecr.inner-rhs] ...)
+            mecr.pre-guard
+            mecr.post-guard
+            (mecr.loop-arg ...))])])))
+
 (define-sequence-syntax do/sequence2
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
@@ -463,6 +507,7 @@
        #:with eb:expanded-clause-record (merge #'(b-clause.expanded ...))
        #:with eb-i:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        (with-syntax* ([(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
+                      [(loop-id** ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-arg-id ...) (generate-temporaries #'(eb.loop-arg ...))]
                       [(loop-arg* ...) #'(((loop-arg-id eb.loop-id ...) eb.inner-id ... ...) ...)]
                       [(loop-arg** ...) (syntax->list #'(eb.loop-arg ...))]
@@ -470,15 +515,15 @@
                                      (length (syntax->list #'(eb-i.loop-id ... eb.loop-id ...)))
                                      (lambda (x) #'#f))]
                       [(id-false ...) (build-list
-                                       (length (syntax->list #'(id ...)))
+                                       (length (syntax->list #'(eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...)))
                                        (lambda (x) #'#f))]
                       [(i-outer-id-id1-false ...) (build-list
                                                    (length (syntax->list #'(eb.inner-id ... ... eb-i.outer-id ... ...)))
                                                    (lambda (x) #'#f))]
-                      [(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok
+                      [(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok ids-ok*
                                          process-outer-seqs)
-                       (generate-temporaries #'(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids1-ok
-                                                                 process-outer-seqs))]
+                       (generate-temporaries #'(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok ids-ok*
+                                                process-outer-seqs))]
                       [pos-guard-id* #'((pos-guard-id eb.outer-id ... ...) eb.loop-id ...)]
                       [(empty ...) (build-list
                                     (length (syntax->list #'(eb-i.loop-id ...)))
@@ -494,14 +539,17 @@
                       [(loop*) (generate-temporaries #'(loop*))]
                       [(body*) (generate-temporaries #'(body*))]
                       [(i-outer-id* ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
+                      [(i-outer-id** ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
                       [(inner-id* ...) (generate-temporaries #'(eb.inner-id ... ...))]
-                      [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))])
+                      [(inner-id** ...) (generate-temporaries #'(eb.inner-id ... ...))]
+                      [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))]
+                      [(post-guard** i-post-guard**) (generate-temporaries #'(post-guard** i-post-guard**))])
          (for-clause-syntax-protect
           #'[(id ...)
              (:do-in
               ;; outer bindings
               ([(eb.outer-id ... ... pos-guard-id i-outer-check-id
-                             i-loop-arg-id ...)
+                 i-loop-arg-id ...)
                 (let-values ([(eb.outer-id ...) eb.outer-rhs] ...
                              [(pos-guard-id) (lambda (eb.outer-id ... ...)
                                                (lambda (eb.loop-id ...) eb.pos-guard))]
@@ -510,11 +558,11 @@
                                                 (lambda (eb-i.loop-id ...)
                                                   (lambda (eb-i.inner-id ... ...) i-loop-arg**)))] ...)
                   (values eb.outer-id ... ... pos-guard-id i-outer-check-id
-                            i-loop-arg-id ...))])
+                          i-loop-arg-id ...))])
               ;; outer check
               eb.outer-check
               ;; loop bindings
-              ([eb.loop-id eb.loop-expr] ...
+              ([loop-id* eb.loop-expr] ...
                [i-loop-id*** #f] ...
                [inner-id* #f] ...
                [i-outer-id* #f] ...
@@ -524,8 +572,10 @@
               ;; pos check
               #t
               ;; inner bindings
-              ([(i-loop-id** ... loop-id* ... ok id ... inner-id* ... i-outer-id* ... ids-ok post-guard* i-post-guard*)
-                (let ([loop-arg-id (lambda (eb.loop-id ...) (lambda (eb.inner-id ... ...) loop-arg**))] ...)
+              ([(i-loop-id** ... loop-id** ... ok eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
+                 inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**)
+                (let ([eb.loop-id loop-id*] ...
+                      [loop-arg-id (lambda (eb.loop-id ...) (lambda (eb.inner-id ... ...) loop-arg**))] ...)
                   (define (loop-with-inner eb.loop-id ...
                                            post-guard* i-post-guard*)
                     (lambda (eb.inner-id ... ...)
@@ -538,8 +588,9 @@
                                         i-post-guard*)
                                    ;; Case 1
                                    (values i-loop-arg* ... eb.loop-id ... #t
-                                             id ... eb.inner-id ... ... eb-i.outer-id ... ... #t
-                                             post-guard* eb-i.post-guard)
+                                           eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
+                                           eb.inner-id ... ... eb-i.outer-id ... ... #t
+                                           post-guard* eb-i.post-guard)
                                    (loop-without-inner eb.loop-id ... post-guard*)))]
                             [else
                              (loop-without-inner eb.loop-id ... post-guard*)])))))
@@ -577,7 +628,7 @@
               ;; post guard
               ok
               ;; loop args
-              (loop-id* ... i-loop-id** ... inner-id* ... i-outer-id* ... ids-ok post-guard* i-post-guard*))]))]
+              (loop-id** ... i-loop-id** ... inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**))]))]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
 ;;ryan: Since for/list doesn't work for multiple-valued sequences,

@@ -25,17 +25,20 @@
 ;; benchmarks
 
 (time* "protect"
- (for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))])
+ #;(for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))])
                  x)])
    x)
- (for/list ([(x) (in-list '(1 2 3 4 5))])
-   x))
+ (for/list ([(x) (in-protect (in-list '(1 2 3 4 5)))]) x)
+ (for/list ([(x) (in-list '(1 2 3 4 5))]) x))
 
 (time* "merge"
- (for/list ([x (do/sequence* ([(x) (in-list '(1 2 3 4 5))]
+ #;(for/list ([x (do/sequence* ([(x) (in-list '(1 2 3 4 5))]
                               [(y) (in-list '(a b c d e))])
                  (list x y))])
    x)
+ (for/list ([(x y) (in-merge (in-list '(1 2 3 4 5))
+                             (in-list '(a b c d e)))])
+   (list x y))
  (for/list ([(x) (in-list '(1 2 3 4 5))]
             [(y) (in-list '(a b c d e))])
    (list x y)))
@@ -52,10 +55,13 @@
    z))
 
 (time* "protect + merge"
- (for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))]
+ #;(for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))]
                              [(y) (in-list '(a b c d e))])
                    (list x y))])
    x)
+ (for/list ([(x y) (in-merge (in-protect (in-list '(1 2 3 4 5)))
+                             (in-protect (in-list '(a b c d e))))])
+   (list x y))
  (for/list ([(x) (in-list '(1 2 3 4 5))]
             [(y) (in-list '(a b c d e))])
    (list x y)))

@@ -19,7 +19,7 @@
 
 (define-syntax (exp-for-clause stx)
   (syntax-case stx ()
-    [(_ ostx e) (expand-for-clause (syntax ostx) (syntax e))]))
+    [(_ e) (expand-for-clause (syntax 'here) (syntax e))]))
 
 (begin-for-syntax
   ;; ct-seen-table : Hash[SExpr => Boolean]
@@ -185,9 +185,11 @@
 (define-syntax (test-do/seq* stx)
   (syntax-parse stx
     [(_ test:do/seq-test)
-     #'(check-equal? test test.rewritten test.msg)]))
+     #'(check-equal? test test.rewritten test.msg)]
+    [(_ expr)
+     #'expr]))
 
 (define-syntax (test-do/seq stx)
   (syntax-parse stx
-    [(_ test:do/seq-test ...)
+    [(_ test ...)
      #'(begin (test-do/seq* test) ...)]))

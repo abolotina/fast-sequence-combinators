@@ -2,9 +2,6 @@
 
 (require "fast-sequence-testing.rkt")
 
-(define x 1)
-(define y 2)
-
 (test-do/seq
 
  (for/list ([(x) (do/sequence () 1)])
@@ -81,7 +78,7 @@
                                       x*)])
                    x)])
    y)
-#|
+
  (for/list ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
                                                         ((1 2) (2 4))
                                                         ((1 2) (3 4))))]
@@ -144,19 +141,16 @@
                                [y (in-list x)])
                    (list y outer-lst2))])
    y)
-|#
+
  (for/list ([(x) (do/sequence ([(z) (in-value 1)]) z)])
    x)
 
+ (define x 1)
+ (define y 2)
  (for/list ([z (do/sequence ([x (in-list (list (list x y)))]
                              [() (in-nullary-relation (odd? x))])
                  x)])
     z)
-)
 
-#;(define x 1)
-#;(define y 2)
-#;(for ([z (do/sequence ([x (in-list (list (list x y)))]
-                         [() (in-nullary-relation (odd? x))])
-                        x)])
-    (println z))
+ (for/list ([z (do/sequence ([x (in-list '(2 3 4))]) x)]) (+ x z))
+)
