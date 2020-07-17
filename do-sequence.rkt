@@ -11,7 +11,11 @@
          in-protect
          in-merge
          (for-syntax bind-clause
-                     when-clause))
+                     when-clause
+                     when-chunk
+                     bind-chunk
+                     expanded-clause-record
+                     nest))
 
 ;; A helper sequence that contains/represents information
 ;; about a number of iterations: 1 or 0.
@@ -483,8 +487,8 @@
   (lambda (stx)
     (syntax-parse stx
       [[(id:id ...) (_ seq-expr:expr ...)]
-       #:with (ecr:expanded-clause-record ...) (map (lambda (b-clause) (expand-for-clause stx b-clause))
-                                                    (syntax->list #'([(id) seq-expr] ...)))
+       #:with (b-clause:bind-clause ...) #'([(id) seq-expr] ...)
+       #:with (ecr:expanded-clause-record ...) #'(b-clause.expanded ...)
        #:with mecr:expanded-clause-record (merge #'(ecr ...))
        (for-clause-syntax-protect
         #'[(id ...)
@@ -498,14 +502,12 @@
             mecr.post-guard
             (mecr.loop-arg ...))])])))
 
-(define-sequence-syntax do/sequence2
-  (lambda (stx)
-    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-  (lambda (stx)
+(begin-for-syntax
+  ;; nest : Syntax[(ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
+  (define (nest stx)
     (syntax-parse stx
-      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
-       #:with eb:expanded-clause-record (merge #'(b-clause.expanded ...))
-       #:with eb-i:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
+      [(eb:expanded-clause-record
+        eb-i:expanded-clause-record)
        (with-syntax* ([(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-id** ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-arg-id ...) (generate-temporaries #'(eb.loop-arg ...))]
@@ -545,90 +547,108 @@
                       [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))]
                       [(post-guard** i-post-guard**) (generate-temporaries #'(post-guard** i-post-guard**))])
          (for-clause-syntax-protect
-          #'[(id ...)
-             (:do-in
-              ;; outer bindings
-              ([(eb.outer-id ... ... pos-guard-id i-outer-check-id
-                 i-loop-arg-id ...)
-                (let-values ([(eb.outer-id ...) eb.outer-rhs] ...
-                             [(pos-guard-id) (lambda (eb.outer-id ... ...)
-                                               (lambda (eb.loop-id ...) eb.pos-guard))]
-                             [(i-outer-check-id) (lambda (eb-i.outer-id ... ...) eb-i.outer-check)]
-                             [(i-loop-arg-id) (lambda (eb-i.outer-id ... ...)
-                                                (lambda (eb-i.loop-id ...)
-                                                  (lambda (eb-i.inner-id ... ...) i-loop-arg**)))] ...)
-                  (values eb.outer-id ... ... pos-guard-id i-outer-check-id
-                          i-loop-arg-id ...))])
-              ;; outer check
-              eb.outer-check
-              ;; loop bindings
-              ([loop-id* eb.loop-expr] ...
-               [i-loop-id*** #f] ...
-               [inner-id* #f] ...
-               [i-outer-id* #f] ...
-               [ids-ok #f]
-               [post-guard* #t]
-               [i-post-guard* #t])
-              ;; pos check
-              #t
-              ;; inner bindings
-              ([(i-loop-id** ... loop-id** ... ok eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
-                 inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**)
-                (let ([eb.loop-id loop-id*] ...
-                      [loop-arg-id (lambda (eb.loop-id ...) (lambda (eb.inner-id ... ...) loop-arg**))] ...)
-                  (define (loop-with-inner eb.loop-id ...
-                                           post-guard* i-post-guard*)
-                    (lambda (eb.inner-id ... ...)
-                      (lambda (eb-i.outer-id ... ...)
-                        (lambda (eb-i.loop-id ...)
-                          (cond
-                            [eb-i.pos-guard
-                             (let-values ([(eb-i.inner-id ...) eb-i.inner-rhs] ...)
-                               (if (and eb-i.pre-guard
-                                        i-post-guard*)
-                                   ;; Case 1
-                                   (values i-loop-arg* ... eb.loop-id ... #t
-                                           eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
-                                           eb.inner-id ... ... eb-i.outer-id ... ... #t
-                                           post-guard* eb-i.post-guard)
-                                   (loop-without-inner eb.loop-id ... post-guard*)))]
-                            [else
-                             (loop-without-inner eb.loop-id ... post-guard*)])))))
-                  (define (loop-without-inner eb.loop-id ... post-guard*)
-                    (cond
-                      [pos-guard-id*
-                       (let-values ([(eb.inner-id ...) eb.inner-rhs] ...)
-                         (if (and eb.pre-guard
-                                  post-guard*)
-                             ;; Case 2
-                             (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...)
-                               i-outer-check*
-                               ((((loop-with-inner loop-arg* ...
-                                                   eb.post-guard #t)
-                                                   eb.inner-id ... ...)
-                                                   eb-i.outer-id ... ...)
-                                                   eb-i.loop-expr ...))
-                             (outer-is-done)))]
-                      [else
-                       (outer-is-done)]))
-                  (define (outer-is-done)
-                    ;; Case 3
-                    (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f))
-                  (cond
-                    [ids-ok
-                     ((((loop-with-inner eb.loop-id ...
-                                         post-guard* i-post-guard*)
-                                         inner-id* ...)
-                                         i-outer-id* ...)
-                                         i-loop-id*** ...)]
-                    [else
-                     (loop-without-inner eb.loop-id ... post-guard*)]))])
-              ;; pre guard
-              ok
-              ;; post guard
-              ok
-              ;; loop args
-              (loop-id** ... i-loop-id** ... inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**))]))]
+          #'(;; outer bindings
+             ([(eb.outer-id ... ... pos-guard-id i-outer-check-id
+                            i-loop-arg-id ...)
+               (let-values ([(eb.outer-id ...) eb.outer-rhs] ...
+                            [(pos-guard-id) (lambda (eb.outer-id ... ...)
+                                              (lambda (eb.loop-id ...) eb.pos-guard))]
+                            [(i-outer-check-id) (lambda (eb-i.outer-id ... ...) eb-i.outer-check)]
+                            [(i-loop-arg-id) (lambda (eb-i.outer-id ... ...)
+                                               (lambda (eb-i.loop-id ...)
+                                                 (lambda (eb-i.inner-id ... ...) i-loop-arg**)))] ...)
+                 (values eb.outer-id ... ... pos-guard-id i-outer-check-id
+                         i-loop-arg-id ...))])
+             ;; outer check
+             eb.outer-check
+             ;; loop bindings
+             ([loop-id* eb.loop-expr] ...
+              [i-loop-id*** #f] ...
+              [inner-id* #f] ...
+              [i-outer-id* #f] ...
+              [ids-ok #f]
+              [post-guard* #t]
+              [i-post-guard* #t])
+             ;; pos check
+             #t
+             ;; inner bindings
+             ([(i-loop-id** ... loop-id** ... ok eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
+                inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**)
+               (let ([eb.loop-id loop-id*] ...
+                     [loop-arg-id (lambda (eb.loop-id ...) (lambda (eb.inner-id ... ...) loop-arg**))] ...)
+                 (define (loop-with-inner eb.loop-id ...
+                                          post-guard* i-post-guard*)
+                   (lambda (eb.inner-id ... ...)
+                     (lambda (eb-i.outer-id ... ...)
+                       (lambda (eb-i.loop-id ...)
+                         (cond
+                           [eb-i.pos-guard
+                            (let-values ([(eb-i.inner-id ...) eb-i.inner-rhs] ...)
+                              (if (and eb-i.pre-guard
+                                       i-post-guard*)
+                                  ;; Case 1
+                                  (values i-loop-arg* ... eb.loop-id ... #t
+                                          eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
+                                          eb.inner-id ... ... eb-i.outer-id ... ... #t
+                                          post-guard* eb-i.post-guard)
+                                  (loop-without-inner eb.loop-id ... post-guard*)))]
+                           [else
+                            (loop-without-inner eb.loop-id ... post-guard*)])))))
+                 (define (loop-without-inner eb.loop-id ... post-guard*)
+                   (cond
+                     [pos-guard-id*
+                      (let-values ([(eb.inner-id ...) eb.inner-rhs] ...)
+                        (if (and eb.pre-guard
+                                 post-guard*)
+                            ;; Case 2
+                            (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...)
+                              i-outer-check*
+                              ((((loop-with-inner loop-arg* ...
+                                                  eb.post-guard #t)
+                                                  eb.inner-id ... ...)
+                                                  eb-i.outer-id ... ...)
+                                                  eb-i.loop-expr ...))
+                            (outer-is-done)))]
+                     [else
+                      (outer-is-done)]))
+                 (define (outer-is-done)
+                   ;; Case 3
+                   (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f))
+                 (cond
+                   [ids-ok
+                    ((((loop-with-inner eb.loop-id ...
+                                        post-guard* i-post-guard*)
+                                        inner-id* ...)
+                                        i-outer-id* ...)
+                                        i-loop-id*** ...)]
+                   [else
+                    (loop-without-inner eb.loop-id ... post-guard*)]))])
+             ;; pre guard
+             ok
+             ;; post guard
+             ok
+             ;; loop args
+             (loop-id** ... i-loop-id** ... inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**))))])))
+
+(define-sequence-syntax do/sequence2
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+       #:with eb:expanded-clause-record (merge #'(b-clause.expanded ...))
+       #:with eb-i:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
+       #:with ecr:expanded-clause-record (nest #'(eb eb-i))
+       #'[(id ...)
+          (:do-in
+           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+           ecr.outer-check
+           ([ecr.loop-id ecr.loop-expr] ...)
+           ecr.pos-guard
+           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+           ecr.pre-guard
+           ecr.post-guard
+           (ecr.loop-arg ...))]]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
 ;;ryan: Since for/list doesn't work for multiple-valued sequences,
