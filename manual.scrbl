@@ -71,7 +71,7 @@ But what about its performance? When we use specialized sequence constructors li
 very fast because it uses inlining and specialization. And functions @racket[sequence-filter] and @racket[sequence-map] return some
 generic sort of a sequence as a result. Therefore, we lose the performance.
 
-Another way of doing it is to apply @racket[even?] and @racket[map] in a @racket[#:when] clause or directly in the body of a loop:
+Another way of doing it is to apply @racket[even?] and @racket[sqr] in a @racket[#:when] clause or directly in the body of a loop:
 
 @examples[#:eval my-evaluator #:label #f
  (for/sum ([x (in-range 1 10000)]

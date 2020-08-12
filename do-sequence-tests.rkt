@@ -1,8 +1,9 @@
 #lang racket
 
-(require "fast-sequence-testing.rkt")
+(require "fast-sequence-testing.rkt"
+         "fast-sequence-testing-wo-protect.rkt")
 
-(test-do/seq
+(test-do/seq-w/o-protect
 
  (for/list ([(x) (do/sequence () 1)])
    2)

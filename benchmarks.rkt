@@ -1,9 +1,10 @@
 #lang racket
 
 (require "do-sequence.rkt"
-         "do-sequence-wo-protect.rkt")
+         "do-sequence-wo-protect.rkt"
+         "nest.rkt")
 
-(define ITER-CT 50000)
+(define ITER-CT 500000)
 
 (define-syntax-rule (time** expr)
   (begin
@@ -43,7 +44,128 @@
             [(y) (in-list '(a b c d e))])
    (list x y)))
 
-(time* "nesting"
+(time* "nesting /w do-sequence2"
+ (for/list ([x (do/sequence2* ([(x) (in-list '((1 2 3) (4 5)))])
+                              (do/sequence ([(y) (in-list x)]) y))])
+   x)
+ (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+            #:when #t
+            [(z) (in-list x)])
+   z))
+
+;; 1. nesting using do/sequence
+;; 2. hand-optimized multiple for-clauses
+;; 3. naive dynamic sequence
+;; 4. the most perfect expansion of do/sequence that I can imagine
+;;    (a hand-optimized single for-clause)
+
+(time* "nesting /w dynamic sequence v.1"
+       (for/list ([(x) (in-concat-sequences1 '((1 2 3) (4 5)))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
+(time* "nesting /w dynamic sequence v.2"
+       (for/list ([(x) (in-concat-sequences2 '((1 2 3) (4 5)))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
+(time* "nesting /w dynamic sequence v.3"
+       (for/list ([(x) (in-concat-sequences '((1 2 3) (4 5)))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
+(time* "nesting /w :do-in"
+ (for/list ([x (:do-in ([(outer-seq) '((1 2 3) (4 5))])
+                       (list? outer-seq)
+                       ([outer-seq outer-seq]
+                        [inner-seq '()])
+                       #t
+                       ([(x outer-seq* inner-rest x-is-found)
+                         (let loop* ([outer-seq* outer-seq]
+                                     [inner-seq* inner-seq])
+                           (cond [(pair? inner-seq*)
+                                  (let ([x (car inner-seq*)]
+                                        [inner-rest (cdr inner-seq*)])
+                                    (cond [(odd? x)
+                                           (values x outer-seq* inner-rest #t)]
+                                          [else
+                                           (loop* outer-seq* inner-rest)]))]
+                                 [(pair? outer-seq*)
+                                  (let ([inner-lst (car outer-seq*)]
+                                        [outer-rest (cdr outer-seq*)])
+                                    (list? inner-lst)
+                                    (loop* outer-rest inner-lst))]
+                                 [else
+                                  (values #f #f #f #f)]))])
+                       x-is-found
+                       #t
+                       (outer-seq* inner-rest))])
+   x)
+ (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+            #:when #t
+            [(z) (in-list x)])
+   z))
+
+(time* "nesting /w :do-in v.2"
+ (for/list ([x (:do-in ([(outer-seq) '((1 2 3) (4 5))])
+                       (list? outer-seq)
+                       ([outer-seq outer-seq]
+                        [inner-seq '()]
+                        [inner-is-initialized? #f]
+                        [post-guard* #t]
+                        [i-post-guard* #t])
+                       #t
+                       ([(x outer-seq* inner-rest inner-is-initialized? post-guard* i-post-guard* x-is-found)
+                         (let ()
+                           (define (loop-with-inner outer-seq* inner-seq* post-guard* i-post-guard*)
+                             (cond [(pair? inner-seq*)
+                                    (let ([x (car inner-seq*)]
+                                          [inner-rest (cdr inner-seq*)])
+                                      (cond [(odd? x)
+                                             (cond [(and #t i-post-guard*)
+                                                    (values x outer-seq* inner-rest #t #t #t #t)]
+                                                   [else
+                                                    (loop-without-inner outer-seq* post-guard*)])]
+                                            [else
+                                             (loop-with-inner outer-seq* inner-rest post-guard* #t)]))]
+                                   [else
+                                    (loop-without-inner outer-seq* post-guard*)]))
+                           (define (loop-without-inner outer-seq* post-guard*)
+                             (cond [(pair? outer-seq*)
+                                    (cond [(and #t post-guard*)
+                                           (let ([inner-lst (car outer-seq*)]
+                                                 [outer-rest (cdr outer-seq*)])
+                                             (list? inner-lst)
+                                             (loop-with-inner outer-rest inner-lst #t #t))]
+                                          [else
+                                           (outer-is-done)])]
+                                   [else
+                                    (outer-is-done)]))
+                           (define (outer-is-done)
+                             (values #f #f #f #f #f #f #f))
+                           (cond [inner-is-initialized?
+                                  (loop-with-inner outer-seq inner-seq post-guard* i-post-guard*)]
+                                 [else
+                                  (loop-without-inner outer-seq post-guard*)]))])
+                       x-is-found
+                       x-is-found
+                       (outer-seq* inner-rest inner-is-initialized? post-guard* i-post-guard*))])
+   x)
+ (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+            #:when #t
+            [(z) (in-list x)])
+   z))
+
+(time* "nesting /w do/sequence"
  (for/list ([x (do/sequence* ([(x) (in-list '((1 2 3) (4 5)))]
                               #:when #t
                               [(z) (in-list x)])
@@ -66,7 +188,16 @@
             [(y) (in-list '(a b c d e))])
    (list x y)))
 
-(time* "protect + nesting"
+(time* "protect + nesting /w do-sequence2"
+ (for/list ([x (do/sequence2 ([(x) (in-list '((1 2 3) (4 5)))])
+                             (do/sequence ([(y) (in-list x)]) y))])
+   x)
+ (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+            #:when #t
+            [(z) (in-list x)])
+   z))
+
+(time* "protect + nesting /w do-sequence"
  (for/list ([x (do/sequence ([(x) (in-list '((1 2 3) (4 5)))]
                              #:when #t
                              [(z) (in-list x)])

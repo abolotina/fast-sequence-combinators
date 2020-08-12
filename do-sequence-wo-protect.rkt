@@ -6,7 +6,8 @@
                      syntax/stx)
          "do-sequence.rkt")
 
-(provide do/sequence*)
+(provide do/sequence*
+         do/sequence2*)
 
 (begin-for-syntax
   (define (merge* stx)

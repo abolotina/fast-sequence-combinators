@@ -1,9 +1,7 @@
 #lang racket
 
-(require "do-sequence-wo-protect.rkt")
+(require "do-sequence.rkt")
 
-(for/list ([x (do/sequence* ([(x) (in-list '((1 2 3) (4 5)))]
-                              #:when #t
-                              [(z) (in-list x)])
-                 z)])
+(for/list ([x (do/sequence2 ([(x) (in-list '(1 2 3))])
+                            (in-range x))])
    x)

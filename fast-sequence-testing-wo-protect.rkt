@@ -10,14 +10,7 @@
          "do-sequence.rkt"
          "do-sequence-wo-protect.rkt")
 
-(provide exp-for-clause
-         test-once
-         check-fast-seq-combinators
-         test-do/seq
-         #;list-nest
-         (all-from-out "fast-sequence-filter.rkt")
-         (all-from-out "fast-sequence-map.rkt")
-         (all-from-out "do-sequence.rkt"))
+(provide test-do/seq-w/o-protect)
 
 (define-syntax (exp-for-clause stx)
   (syntax-case stx ()
@@ -168,17 +161,32 @@
        stx]
       [[id seq-expr]
        stx]))
+
+  (define (rewrite-to-w/o-protect stx)
+    (syntax-parse stx
+      #:literals (do/sequence)
+      [[(id ...) (do/sequence (clause:do/seq-clause ...) body ...)]
+       #'[(id ...) (do/sequence* (clause.w/o-protect ... ...) body ...)]]
+      [[id (do/sequence (clause:do/seq-clause ...) body ...)]
+       #'[id (do/sequence* (clause.w/o-protect ... ...) body ...)]]
+      [[(id ...) seq-expr]
+       stx]
+      [[id seq-expr]
+       stx]))
   
   (define-splicing-syntax-class do/seq-clause
     (pattern b:bind-clause
-             #:with (rewritten ...) (list (rewrite-to-for/list #'b)))
+             #:with (rewritten ...) (list (rewrite-to-for/list #'b))
+             #:with (w/o-protect ...) (list (rewrite-to-w/o-protect #'b)))
     (pattern w:when-clause
-             #:with (rewritten ...) #'w))
+             #:with (rewritten ...) #'w
+             #:with (w/o-protect ...) #'w))
 
   (define-syntax-class do/seq-test
     #:literals (for/list)
     (pattern (for/list (clause:do/seq-clause ...) body ...)
              #:with rewritten #'(for/list (clause.rewritten ... ...) body ...)
+             #:with w/o-protect #'(for/list (clause.w/o-protect ... ...) body ...)
              #:with msg (with-syntax ([msg (string-append "Test failed at "
                                                           (source-location->string
                                                            this-syntax))])
@@ -191,29 +199,7 @@
     [(_ expr)
      #'expr]))
 
-(define-syntax (test-do/seq stx)
+(define-syntax (test-do/seq-w/o-protect stx)
   (syntax-parse stx
     [(_ test ...)
      #'(begin (test-do/seq* test) ...)]))
-
-#;(define (sequence-nest s)
-  (unless (sequence? s) (raise-argument-error 'sequence-nest "sequence?" s))
-  (make-do-sequence
-   (lambda ()
-     ;; SeqPos[X ...] = (Pair (U #f (List X ...)) (-> SeqPos))
-     ;; Position[X ...] = (Pair SeqPos[Sequence[X ...]] SeqPos[X ...]])
-     (let ()
-       ;; get-elt : Position[X ...] -> (Values X ...)
-       (define (get-elt pos)
-         (apply values (cadr pos)))
-       (define (get-next pos)
-         (cond
-           ;; outer sequence is not empty
-           [(caar pos)
-            ]))
-       (values get-elt
-               tail
-               (cons vals next)
-               (lambda (pos) (or (caar pos) (cadr pos)))
-               #f
-               #f)))))

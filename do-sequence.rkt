@@ -7,6 +7,7 @@
                      #;macro-debugger/emit))
 
 (provide do/sequence
+         do/sequence2
          in-nullary-relation
          in-protect
          in-merge
@@ -383,75 +384,92 @@
       [(= n 1) (generate-temporaries xs)]
       [else (map (lambda (x) (gen-temp-tree (sub1 n) x)) (stx->list xs))]))
 
+  ;; protect-bindings : Syntax[ECR[G][G']] -> Syntax[PECR[G][G']]
   (define (protect-bindings stx)
     (syntax-parse stx
       [ecr:expanded-clause-record
-       (with-syntax ([(ecr-loop-expr* ...) (generate-temporaries #'(ecr.loop-expr ...))]
-                     [(ecr-outer-check*) (generate-temporaries #'(ecr.outer-check))]
-                     [(ecr-pos-guard*) (generate-temporaries #'(ecr.pos-guard))]
-                     [(ecr-inner-rhs* ...) (generate-temporaries #'(ecr.inner-rhs ...))]
-                     [(ecr-pre-guard*) (generate-temporaries #'(ecr.pre-guard))]
-                     [(ecr-post-guard*) (generate-temporaries #'(ecr.post-guard))]
-                     [(ecr-loop-arg* ...) (generate-temporaries #'(ecr.loop-arg ...))])
+       (with-syntax ([(ecr-loop-expr* ...) (generate-temporaries #'(ecr.loop-id ...))]
+                     [(ecr-outer-check*) (generate-temporaries #'(outer-check))]
+                     [(ecr-pos-guard*) (generate-temporaries #'(pos-guard))]
+                     [(ecr-inner-rhs* ...) (generate-temporaries
+                                            (map (lambda (x) 'inner-rhs) (syntax->list #'(ecr.inner-rhs ...))))]
+                     [(ecr-pre-guard*) (generate-temporaries #'(pre-guard))]
+                     [(ecr-post-guard*) (generate-temporaries #'(post-guard))]
+                     [(ecr-loop-arg* ...) (generate-temporaries #'(ecr.loop-id ...))]
+                     [(loop-id* ...) (generate-temporaries #'(ecr.loop-id ...))]
+                     [((inner-id* ...) ...) (gen-temp-tree 2 #'((ecr.inner-id ...) ...))])
          #'(;; outer bindings
             ([(ecr.outer-id ...) ecr.outer-rhs] ...
              [(ecr-outer-check*) (lambda (ecr.outer-id ... ...) ecr.outer-check)]
              [(ecr-loop-expr*) (lambda (ecr.outer-id ... ...) ecr.loop-expr)] ...
-             [(ecr-pos-guard*) (lambda (ecr.outer-id ... ...)
-                                 (lambda (ecr.loop-id ...) ecr.pos-guard))]
-             [(ecr-inner-rhs*) (lambda (ecr.outer-id ... ...)
-                                 (lambda (ecr.loop-id ...) ecr.inner-rhs))] ...
-             [(ecr-pre-guard*) (lambda (ecr.outer-id ... ...)
-                                 (lambda (ecr.loop-id ...)
-                                   (lambda (ecr.inner-id ... ...) ecr.pre-guard)))]
-             [(ecr-post-guard*) (lambda (ecr.outer-id ... ...)
-                                  (lambda (ecr.loop-id ...)
-                                    (lambda (ecr.inner-id ... ...) ecr.post-guard)))]
-             [(ecr-loop-arg*) (lambda (ecr.outer-id ... ...)
-                                (lambda (ecr.loop-id ...)
-                                  (lambda (ecr.inner-id ... ...) ecr.loop-arg)))] ...)
+             [(ecr-pos-guard*) (lambda (ecr.outer-id ... ... loop-id* ...)
+                                 (let ([ecr.loop-id loop-id*] ...) ecr.pos-guard))]
+             [(ecr-inner-rhs*) (lambda (ecr.outer-id ... ... loop-id* ...)
+                                 (let ([ecr.loop-id loop-id*] ...) ecr.inner-rhs))] ...
+             [(ecr-pre-guard*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
+                                 (let ([ecr.loop-id loop-id*] ...)
+                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.pre-guard)))]
+             [(ecr-post-guard*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
+                                 (let ([ecr.loop-id loop-id*] ...)
+                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.post-guard)))]
+             [(ecr-loop-arg*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
+                                 (let ([ecr.loop-id loop-id*] ...)
+                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.loop-arg)))] ...)
             ;; outer check
             (ecr-outer-check* ecr.outer-id ... ...)
             ;; loop bindings
             ([ecr.loop-id (ecr-loop-expr* ecr.outer-id ... ...)] ...)
             ;; pos check
-            ((ecr-pos-guard* ecr.outer-id ... ...)
-                             ecr.loop-id ...)
+            (ecr-pos-guard* ecr.outer-id ... ...
+                            ecr.loop-id ...)
             ;; inner bindings
-            ([(ecr.inner-id ...) ((ecr-inner-rhs* ecr.outer-id ... ...)
-                                                  ecr.loop-id ...)] ...)
+            ([(ecr.inner-id ...) (ecr-inner-rhs* ecr.outer-id ... ...
+                                                 ecr.loop-id ...)] ...)
             ;; pre guard
-            (((ecr-pre-guard* ecr.outer-id ... ...)
-                              ecr.loop-id ...)
-                              ecr.inner-id ... ...)
+            (ecr-pre-guard* ecr.outer-id ... ...
+                            ecr.loop-id ...
+                            ecr.inner-id ... ...)
             ;; post guard
-            (((ecr-post-guard* ecr.outer-id ... ...)
-                               ecr.loop-id ...)
-                               ecr.inner-id ... ...)
+            (ecr-post-guard* ecr.outer-id ... ...
+                             ecr.loop-id ...
+                             ecr.inner-id ... ...)
             ;; loop args
-            ((((ecr-loop-arg* ecr.outer-id ... ...)
-                              ecr.loop-id ...)
-                              ecr.inner-id ... ...) ...)))]))
+            ((ecr-loop-arg* ecr.outer-id ... ...
+                            ecr.loop-id ...
+                            ecr.inner-id ... ...) ...)))]))
   
+  ;; merge : PECR[G][G'][{outer-id:a, ...}][{loop-id:c, ...}][{inner-id:e, ...}] ... -> ECR[G][G'...][Go'][Gl'][Gi']
   (define (merge stx)
     (syntax-parse stx
       [(ecr:expanded-clause-record ...)
        #:with (pecr:expanded-clause-record ...) #'(ecr.protected ...)
        #'(;; outer bindings
-          ([(pecr.outer-id ...) pecr.outer-rhs] ... ...)
+          ;; pecr.outer-rhs : Expr[G][a] ... ...
+          ([(pecr.outer-id ...) pecr.outer-rhs] ... ...
+           ;; ...
+           ;; extra stuff
+           ;; ...
+           )
           ;; outer check
+          ;; pecr.outer-check : Expr[(List* Rib[{outer-id : a}] G)][Any] ...
           (and pecr.outer-check ...)
           ;; loop bindings
+          ;; pecr.loop-expr : Expr[(List* Rib[{outer-id : a}] G)][c] ... ...
           ([pecr.loop-id pecr.loop-expr] ... ...)
           ;; pos check
+          ;; pecr.pos-guard : Expr[(List* Rib[{loop-id : c}] Rib[{outer-id : a}] G)][Any] ...
           (and pecr.pos-guard ...)
           ;; inner bindings
+          ;; pecr.inner-rhs : Expr[(List* Rib[{loop-id : c}] Rib[{outer-id : a}] G)][e] ... ...
           ([(pecr.inner-id ...) pecr.inner-rhs] ... ...)
           ;; pre guard
+          ;; pecr.pre-guard : Expr[(List* Rib[{inner-id : e, ...}] Rib[{loop-id : c}] Rib[{outer-id : a}] G)][Any] ...
           (and pecr.pre-guard ...)
           ;; post guard
+          ;; pecr.post-guard : Expr[(List* Rib[{inner-id : e, ...}] Rib[{loop-id : c}] Rib[{outer-id : a}] G)][Any] ...
           (and pecr.post-guard ...)
           ;; loop args
+          ;; pecr.loop-arg : Expr[(List* Rib[{inner-id : e, ...}] Rib[{loop-id : c}] Rib[{outer-id : a}] G)][c] ... ...
           (pecr.loop-arg ... ...))]))
 
   #;(define (merge stx)
@@ -510,8 +528,9 @@
         eb-i:expanded-clause-record)
        (with-syntax* ([(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-id** ...) (generate-temporaries #'(eb.loop-id ...))]
-                      [(loop-arg-id ...) (generate-temporaries #'(eb.loop-arg ...))]
-                      [(loop-arg* ...) #'(((loop-arg-id eb.loop-id ...) eb.inner-id ... ...) ...)]
+                      [(loop-id*** ...) (generate-temporaries #'(eb.loop-id ...))]
+                      [(loop-arg-id ...) (generate-temporaries #'(eb.loop-id ...))]
+                      [(loop-arg* ...) #'((loop-arg-id eb.loop-id ... eb.inner-id ... ...) ...)]
                       [(loop-arg** ...) (syntax->list #'(eb.loop-arg ...))]
                       [(false* ...) (build-list
                                      (length (syntax->list #'(eb-i.loop-id ... eb.loop-id ...)))
@@ -526,39 +545,45 @@
                                          process-outer-seqs)
                        (generate-temporaries #'(i-outer-check-id pos-guard-id i-pos-guard-id i-pos-guard* ids-ok ids-ok*
                                                 process-outer-seqs))]
-                      [pos-guard-id* #'((pos-guard-id eb.outer-id ... ...) eb.loop-id ...)]
+                      [pos-guard-id* #'(pos-guard-id eb.outer-id ... ... eb.loop-id ...)]
                       [(empty ...) (build-list
                                     (length (syntax->list #'(eb-i.loop-id ...)))
                                     (lambda (x) #''()))]
                       [(i-loop-id* ...) (generate-temporaries #'(eb-i.loop-id ...))]
                       [(i-loop-id** ...) (generate-temporaries #'(eb-i.loop-id ...))]
                       [(i-loop-id*** ...) (generate-temporaries #'(eb-i.loop-id ...))]
+                      [(i-loop-id**** ...) (generate-temporaries #'(eb-i.loop-id ...))]
                       [(i-loop-arg-id ...) (generate-temporaries #'(eb-i.loop-arg ...))]
                       [(i-loop-arg* ...)
-                       #'((((i-loop-arg-id eb-i.outer-id ... ...) eb-i.loop-id ...) eb-i.inner-id ... ...) ...)]
+                       #'((i-loop-arg-id eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...) ...)]
                       [(i-loop-arg** ...) (syntax->list #'(eb-i.loop-arg ...))]
                       [i-outer-check* #'(i-outer-check-id eb-i.outer-id ... ...)]
                       [(loop*) (generate-temporaries #'(loop*))]
                       [(body*) (generate-temporaries #'(body*))]
+                      [((outer-id*** ...) ...) (gen-temp-tree 2 #'((eb.outer-id ...) ...))]
                       [(i-outer-id* ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
                       [(i-outer-id** ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
+                      [(i-outer-id*** ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
+                      [((i-outer-id**** ...) ...) (gen-temp-tree 2 #'((eb-i.outer-id ...) ...))]
                       [(inner-id* ...) (generate-temporaries #'(eb.inner-id ... ...))]
                       [(inner-id** ...) (generate-temporaries #'(eb.inner-id ... ...))]
+                      [((inner-id*** ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))]
+                      [((i-inner-id**** ...) ...) (gen-temp-tree 2 #'((eb-i.inner-id ...) ...))]
                       [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))]
                       [(post-guard** i-post-guard**) (generate-temporaries #'(post-guard** i-post-guard**))])
          (for-clause-syntax-protect
           #'(;; outer bindings
-             ([(eb.outer-id ... ... pos-guard-id i-outer-check-id
-                            i-loop-arg-id ...)
-               (let-values ([(eb.outer-id ...) eb.outer-rhs] ...
-                            [(pos-guard-id) (lambda (eb.outer-id ... ...)
-                                              (lambda (eb.loop-id ...) eb.pos-guard))]
-                            [(i-outer-check-id) (lambda (eb-i.outer-id ... ...) eb-i.outer-check)]
-                            [(i-loop-arg-id) (lambda (eb-i.outer-id ... ...)
-                                               (lambda (eb-i.loop-id ...)
-                                                 (lambda (eb-i.inner-id ... ...) i-loop-arg**)))] ...)
-                 (values eb.outer-id ... ... pos-guard-id i-outer-check-id
-                         i-loop-arg-id ...))])
+             ([(eb.outer-id ...) eb.outer-rhs] ...
+              [(pos-guard-id) (lambda (outer-id*** ... ... loop-id*** ...)
+                                (let ([eb.outer-id outer-id***] ... ...)
+                                  (let ([eb.loop-id loop-id***] ...)
+                                    eb.pos-guard)))]
+              [(i-outer-check-id) (lambda (eb-i.outer-id ... ...) eb-i.outer-check)]
+              [(i-loop-arg-id) (lambda (i-outer-id**** ... ... i-loop-id**** ... i-inner-id**** ... ...)
+                                 (let ([eb-i.outer-id i-outer-id****] ... ...)
+                                   (let ([eb-i.loop-id i-loop-id****] ...)
+                                     (let ([eb-i.inner-id i-inner-id****] ... ...)
+                                       i-loop-arg**))))] ...)
              ;; outer check
              eb.outer-check
              ;; loop bindings
@@ -575,25 +600,30 @@
              ([(i-loop-id** ... loop-id** ... ok eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
                 inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**)
                (let ([eb.loop-id loop-id*] ...
-                     [loop-arg-id (lambda (eb.loop-id ...) (lambda (eb.inner-id ... ...) loop-arg**))] ...)
-                 (define (loop-with-inner eb.loop-id ...
-                                          post-guard* i-post-guard*)
-                   (lambda (eb.inner-id ... ...)
-                     (lambda (eb-i.outer-id ... ...)
-                       (lambda (eb-i.loop-id ...)
-                         (cond
-                           [eb-i.pos-guard
-                            (let-values ([(eb-i.inner-id ...) eb-i.inner-rhs] ...)
-                              (if (and eb-i.pre-guard
-                                       i-post-guard*)
-                                  ;; Case 1
-                                  (values i-loop-arg* ... eb.loop-id ... #t
-                                          eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
-                                          eb.inner-id ... ... eb-i.outer-id ... ... #t
-                                          post-guard* eb-i.post-guard)
-                                  (loop-without-inner eb.loop-id ... post-guard*)))]
-                           [else
-                            (loop-without-inner eb.loop-id ... post-guard*)])))))
+                     [loop-arg-id (lambda (loop-id*** ... inner-id*** ... ...)
+                                    (let ([eb.loop-id loop-id***] ...)
+                                      (let ([eb.inner-id inner-id***] ... ...)
+                                        loop-arg**)))] ...)
+                 (define (loop-with-inner loop-id*** ...
+                                          post-guard* i-post-guard*
+                                          inner-id*** ... ... i-outer-id**** ... ... i-loop-id**** ...)
+                   (let ([eb.loop-id loop-id***] ...)
+                     (let ([eb.inner-id inner-id***] ... ...)
+                       (let ([eb-i.outer-id i-outer-id****] ... ...)
+                         (let ([eb-i.loop-id i-loop-id****] ...)
+                           (cond
+                             [eb-i.pos-guard
+                              (let-values ([(eb-i.inner-id ...) eb-i.inner-rhs] ...)
+                                (if (and eb-i.pre-guard
+                                         i-post-guard*)
+                                    ;; Case 1
+                                    (values i-loop-arg* ... eb.loop-id ... #t
+                                            eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
+                                            eb.inner-id ... ... eb-i.outer-id ... ... #t
+                                            post-guard* eb-i.post-guard)
+                                    (loop-without-inner eb.loop-id ... post-guard*)))]
+                             [else
+                              (loop-without-inner eb.loop-id ... post-guard*)]))))))
                  (define (loop-without-inner eb.loop-id ... post-guard*)
                    (cond
                      [pos-guard-id*
@@ -603,11 +633,11 @@
                             ;; Case 2
                             (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...)
                               i-outer-check*
-                              ((((loop-with-inner loop-arg* ...
-                                                  eb.post-guard #t)
-                                                  eb.inner-id ... ...)
-                                                  eb-i.outer-id ... ...)
-                                                  eb-i.loop-expr ...))
+                              (loop-with-inner loop-arg* ...
+                                               eb.post-guard #t
+                                               eb.inner-id ... ...
+                                               eb-i.outer-id ... ...
+                                               eb-i.loop-expr ...))
                             (outer-is-done)))]
                      [else
                       (outer-is-done)]))
@@ -616,11 +646,11 @@
                    (values false* ... #f id-false ... i-outer-id-id1-false ... #f #f #f))
                  (cond
                    [ids-ok
-                    ((((loop-with-inner eb.loop-id ...
-                                        post-guard* i-post-guard*)
-                                        inner-id* ...)
-                                        i-outer-id* ...)
-                                        i-loop-id*** ...)]
+                    (loop-with-inner eb.loop-id ...
+                                     post-guard* i-post-guard*
+                                     inner-id* ...
+                                     i-outer-id* ...
+                                     i-loop-id*** ...)]
                    [else
                     (loop-without-inner eb.loop-id ... post-guard*)]))])
              ;; pre guard
