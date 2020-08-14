@@ -10,7 +10,7 @@
   (define n 0)
   (lambda ([d 1]) (set! n (+ d n)) n))
 
-(define (dyn-list lst)
+(define (dyn-list l)
   (make-do-sequence
    (lambda ()
      (values car #f cdr l pair? #f #f))))
