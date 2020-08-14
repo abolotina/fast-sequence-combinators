@@ -10,12 +10,40 @@
   (define n 0)
   (lambda ([d 1]) (set! n (+ d n)) n))
 
-(define srcs `(([(in-list (list 1 2 3)) (list 1 2 3) (in-range 5) (in-value 1) (+ 0 5) (in-vector (vector 3 5 7))
-                 (fast-sequence-map add1 (list 2 3 4)) (in-producer (counter) (lambda (x) (> x 10)))]
-                [,(lambda (x) #t) ,(lambda (x) `(even? ,x)) ,(lambda (x) `(< ,x 5)) ,(lambda (x) `(> ,x 1))])
-               ([(in-list (list #\a #\b #\c)) (in-string "hello") (fast-sequence-filter char? (in-list #\4 1 #\f 5))
+(define (dyn-list lst)
+  (make-do-sequence
+   (lambda ()
+     (values car #f cdr l pair? #f #f))))
+
+(define (dyn-int v)
+  (make-do-sequence
+   (lambda ()
+     (values values add1 values 0 (lambda (i) (i . < . v)) #f #f))))
+
+(define srcs `(([(in-list (list 1 2 3))
+                 (list 1 2 3)
+                 (in-range 5)
+                 (in-value 1)
+                 (dyn-list (list 1 2 3))
+                 (dyn-int 5)
+                 5
+                 (+ 0 5)
+                 (vector 1 2 3)
+                 (in-vector (vector 3 5 7))
+                 (fast-sequence-map add1 (list 2 3 4))
+                 (in-producer (counter) (lambda (x) (> x 10)))]
+                [,(lambda (x) #t)
+                 ,(lambda (x) `(even? ,x))
+                 ,(lambda (x) `(< ,x 5))
+                 ,(lambda (x) `(> ,x 1))])
+               
+               ([(in-list (list #\a #\b #\c))
+                 (in-string "hello")
+                 (fast-sequence-filter char? (in-list #\4 1 #\f 5))
                  (in-port read-char (open-input-string "a1b2c3"))]
-                [,(lambda (x) #t) ,(lambda (x) `(char-alphabetic? ,x)) ,(lambda (x) `(char<? ,x #\b))])))
+                [,(lambda (x) #t)
+                 ,(lambda (x) `(char-alphabetic? ,x))
+                 ,(lambda (x) `(char<? ,x #\b))])))
 
 (define seq-when-pairs*
   (for*/list ([l (in-list srcs)]
