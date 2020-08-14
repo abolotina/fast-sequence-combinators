@@ -109,6 +109,6 @@
 
 (define-namespace-anchor a)
 (define ns (namespace-anchor->namespace a))
-(eval (make-test (cadr seq-when-pairs)) ns)
+#;(eval (make-test (cadr seq-when-pairs)) ns)
 
-#;(run-tests ns)
+(run-tests ns)
