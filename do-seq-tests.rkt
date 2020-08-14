@@ -24,8 +24,8 @@
                  (list 1 2 3)
                  (in-range 5)
                  (in-value 1)
-                 (dyn-list (list 1 2 3))
                  (dyn-int 5)
+                 (dyn-list (list 1 2 3))
                  5
                  (+ 0 5)
                  (vector 1 2 3)
