@@ -4,6 +4,7 @@
                      racket
                      syntax/parse
                      syntax/srcloc)
+         syntax/unsafe/for-transform
          rackunit
          "fast-sequence-filter.rkt"
          "fast-sequence-map.rkt"
