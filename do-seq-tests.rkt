@@ -47,12 +47,15 @@
      (let*-values ([(b1 w1) (bind-when sw1 '(x y))]
                    [(ids) (car b1)]
                    [(do/seq) `(for/list ([x (do/sequence (,b1 #:when ,w1) (list ,@ids))]) x)])
-       `(check-equal?
-         ,do/seq
-         (for/list ([x (for/list (,b1 #:when ,w1) (list ,@ids))]) x)
-         ,(begin
-            (display do/seq o)
-            (get-output-string o))))]
+       `(begin
+          (display ,(begin (fprintf o "sw: [~a, ~a]\n" b1 w1)
+                           (get-output-string o)))
+          (check-equal?
+           ,do/seq
+           (for/list ([x (for/list (,b1 #:when ,w1) (list ,@ids))]) x)
+           ,(begin
+              (display do/seq o)
+              (get-output-string o)))))]
     [else
      (let*-values ([(b1 w1) (bind-when sw1 '(x y))]
                    [(b2 w2) (bind-when (car sws) '(z w))]
@@ -60,12 +63,15 @@
                    [(do/seq)`(for/list ([x (do/sequence (,b1 #:when ,w1 ,b2 #:when ,w2)
                                              (list ,@ids))])
                                x)])
-       `(check-equal?
-         ,do/seq
-         (for/list ([x (for/list (,b1 #:when ,w1 ,b2 #:when ,w2) (list ,@ids))]) x)
-         ,(begin
-            (display do/seq o)
-            (get-output-string o))))]))
+       `(begin
+          (display ,(begin (printf o "sw1: [~a, ~a]\n sw2: [~a, ~a]\n" b1 w1 b2 w2)
+                           (get-output-string o)))
+          (check-equal?
+           ,do/seq
+           (for/list ([x (for/list (,b1 #:when ,w1 ,b2 #:when ,w2) (list ,@ids))]) x)
+           ,(begin
+              (display do/seq o)
+              (get-output-string o)))))]))
 
 (define seq-when-pairs2
   (for*/list ([s (in-list (caar srcs))]
@@ -105,4 +111,4 @@
 (define ns (namespace-anchor->namespace a))
 (eval (make-test (cadr seq-when-pairs)) ns)
 
-(run-tests ns)
+#;(run-tests ns)

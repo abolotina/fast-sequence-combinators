@@ -4,6 +4,7 @@
                      racket
                      syntax/parse
                      syntax/stx
+                     syntax/unsafe/for-transform
                      #;macro-debugger/emit))
 
 (provide do/sequence
