@@ -1,7 +1,7 @@
 #lang racket
 
-(require (for-syntax racket/syntax)
-         syntax/unsafe/for-transform)
+(require (for-syntax racket/syntax
+                     syntax/unsafe/for-transform))
 
 (provide fast-sequence-map)
 

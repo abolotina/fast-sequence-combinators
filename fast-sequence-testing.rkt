@@ -3,8 +3,8 @@
 (require (for-syntax racket/syntax
                      racket
                      syntax/parse
-                     syntax/srcloc)
-         syntax/unsafe/for-transform
+                     syntax/srcloc
+                     syntax/unsafe/for-transform)
          rackunit
          "fast-sequence-filter.rkt"
          "fast-sequence-map.rkt"
