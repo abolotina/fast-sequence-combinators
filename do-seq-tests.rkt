@@ -39,7 +39,7 @@
                
                ([(in-list (list #\a #\b #\c))
                  (in-string "hello")
-                 (fast-sequence-filter char? (in-list #\4 1 #\f 5))
+                 (fast-sequence-filter char? (in-list (list #\4 1 #\f 5)))
                  (in-port read-char (open-input-string "a1b2c3"))]
                 [,(lambda (x) #t)
                  ,(lambda (x) `(char-alphabetic? ,x))
