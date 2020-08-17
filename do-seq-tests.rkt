@@ -92,7 +92,7 @@
                                              (list ,@ids))])
                                x)])
        `(begin
-          (display ,(begin (printf o "sw1: [~a, ~a]\n sw2: [~a, ~a]\n" b1 w1 b2 w2)
+          (display ,(begin (fprintf o "sw1: [~a, ~a]\n sw2: [~a, ~a]\n" b1 w1 b2 w2)
                            (get-output-string o)))
           (check-equal?
            ,do/seq
@@ -131,8 +131,8 @@
 
 (define (run-tests ns)
   (begin
-    (run-tests1 ns)
-    (run-tests2 ns)
+    #;(run-tests1 ns)
+    #;(run-tests2 ns)
     (run-tests3 ns)))
 
 (define-namespace-anchor a)
