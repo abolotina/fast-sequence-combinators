@@ -618,11 +618,11 @@
                                 (if (and eb-i.pre-guard
                                          i-post-guard*)
                                     ;; Case 1
-                                    (values i-loop-arg* ... eb.loop-id ... #t
+                                    (values i-loop-arg* ... loop-id*** ... #t
                                             eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
                                             eb.inner-id ... ... eb-i.outer-id ... ... #t
                                             post-guard* eb-i.post-guard)
-                                    (loop-without-inner eb.loop-id ... post-guard*)))]
+                                    (loop-without-inner loop-id*** ... post-guard*)))]
                              [else
                               (loop-without-inner eb.loop-id ... post-guard*)]))))))
                  (define (loop-without-inner eb.loop-id ... post-guard*)
