@@ -13,14 +13,14 @@
 (([lst1 #;A : Id '((1 2) () (2 4) (5 6)) : Expr[G][(Listof^2 Nat)]])
  (pair? lst1) : Expr[G/lst1 : (Listof Nat)][Boolean]
  ([x : Id (car lst1) : Expr[G/lst1 : (Listof^2 Nat)][(Listof Nat)]]
-  [lst1 #;B : Id (cdr lst1) : Expr[G/lst1 : (Listof^2 Nat)][(Listof^2 Nat)])])
+  [lst1 #;B : Id (cdr lst1) : Expr[G/lst1 : (Listof^2 Nat)][(Listof^2 Nat)]])
  (lst1 #;B : Expr[G/lst : (Listof Nat)/x : (Listof Nat), rest1 : (Listof^2 Nat)][(Listof^2 Nat)])),
 where lst1, rest1 are fresh variables
 
 (([lst2 : Id x : Expr[G/x : (Listof Nat)][(Listof Nat)]])
  (pair? lst2) : Expr[G/x : (Listof Nat)/lst2 : (Listof Nat)][Boolean]
  ([y : Id (car lst2) : Expr[G/x : (Listof Nat)/lst2 : (Listof Nat)][Nat]]
-  [rest2 : Id (cdr lst2) : Expr[G/x : (Listof Nat)/lst2 : (Listof Nat)][(Listof Nat)])])
+  [rest2 : Id (cdr lst2) : Expr[G/x : (Listof Nat)/lst2 : (Listof Nat)][(Listof Nat)]])
  (rest2 : Expr[G/x : (Listof Nat)/lst2 : (Listof Nat)/y : Nat, rest2 : (Listof Nat)][(Listof Nat)])),
 where lst2, rest2 are fresh variables
 
