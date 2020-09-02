@@ -34,6 +34,7 @@
  (for/list ([(x) (do/sequence (#:when #t #:when (odd? 2) [(x*) (in-list '(1 2 3 4 5))]) x*)])
    x)
 
+ (define a 1)
  (for/list ([a (do/sequence ([(a) (in-list '(1 2 3 4 5))]
                              [(z) (in-list '(a b c d e))]
                              #:when (odd? a))
@@ -66,12 +67,12 @@
                    y)])
    x)
 
- (for/list ([(y) (do/sequence ([(lst) '((1 2) () (2 4) (5 6))]
+ (for/list ([(x) (do/sequence ([(lst) '((1 2) () (2 4) (5 6))]
                                #:when #t
                                [(x) (in-list lst)]
                                #:when (odd? x))
                    x)])
-   y)
+   x)
 
  (for/list ([(y) (do/sequence ([(x) (do/sequence ([(seq) (in-list '((1 2) (3 4) (5 6)))]
                                                   #:when #t
@@ -148,7 +149,7 @@
 
  (define x 1)
  (define y 2)
- (for/list ([z (do/sequence ([x (in-list (list (list x y)))]
+ #;(for/list ([z (do/sequence ([x (in-list (list (list x y)))]
                              [() (in-nullary-relation (odd? x))])
                  x)])
     z)

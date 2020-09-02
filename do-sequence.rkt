@@ -521,6 +521,22 @@
             mecr.post-guard
             (mecr.loop-arg ...))])])))
 
+(define-syntax (let/ribs stx)
+  (syntax-parse stx
+    [(let/ribs ([id1 expr1] ...) ([id2 expr2] ...) ...+ body ...+)
+     #'(let ([id1 expr1] ...)
+         (let/ribs ([id2 expr2] ...) ... body ...))]
+    [(let/ribs ([id expr] ...) body ...+)
+     #'(let ([id expr] ...)
+         body ...)]))
+
+(define-syntax (lambda/ribs stx)
+  (syntax-parse stx
+    [(_ (arg ...) ...+ body ...+)
+     (with-syntax ([((arg* ...) ...) (gen-temp-tree 2 #'((arg ...) ...))])
+       #'(lambda (arg* ... ...)
+           (let/ribs ([arg arg*] ...) ... body ...)))]))
+
 (begin-for-syntax
   ;; nest : Syntax[(ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
   (define (nest stx)
@@ -531,8 +547,6 @@
                       [(loop-id** ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-id*** ...) (generate-temporaries #'(eb.loop-id ...))]
                       [(loop-arg-id ...) (generate-temporaries #'(eb.loop-id ...))]
-                      [(loop-arg* ...) #'((loop-arg-id eb.loop-id ... eb.inner-id ... ...) ...)]
-                      [(loop-arg** ...) (syntax->list #'(eb.loop-arg ...))]
                       [(false* ...) (build-list
                                      (length (syntax->list #'(eb-i.loop-id ... eb.loop-id ...)))
                                      (lambda (x) #'#f))]
@@ -555,37 +569,33 @@
                       [(i-loop-id*** ...) (generate-temporaries #'(eb-i.loop-id ...))]
                       [(i-loop-id**** ...) (generate-temporaries #'(eb-i.loop-id ...))]
                       [(i-loop-arg-id ...) (generate-temporaries #'(eb-i.loop-arg ...))]
+                      [((inner-id*** ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))]
                       [(i-loop-arg* ...)
-                       #'((i-loop-arg-id eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...) ...)]
-                      [(i-loop-arg** ...) (syntax->list #'(eb-i.loop-arg ...))]
+                       #'((i-loop-arg-id eb.outer-id ... ... loop-id*** ... inner-id*** ... ...
+                                         eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...) ...)]
                       [i-outer-check* #'(i-outer-check-id eb-i.outer-id ... ...)]
                       [(loop*) (generate-temporaries #'(loop*))]
                       [(body*) (generate-temporaries #'(body*))]
-                      [((outer-id*** ...) ...) (gen-temp-tree 2 #'((eb.outer-id ...) ...))]
                       [(i-outer-id* ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
                       [(i-outer-id** ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
                       [(i-outer-id*** ...) (generate-temporaries #'(eb-i.outer-id ... ...))]
                       [((i-outer-id**** ...) ...) (gen-temp-tree 2 #'((eb-i.outer-id ...) ...))]
                       [(inner-id* ...) (generate-temporaries #'(eb.inner-id ... ...))]
                       [(inner-id** ...) (generate-temporaries #'(eb.inner-id ... ...))]
-                      [((inner-id*** ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))]
-                      [((i-inner-id**** ...) ...) (gen-temp-tree 2 #'((eb-i.inner-id ...) ...))]
+                      [(loop-arg* ...) #'((loop-arg-id loop-id*** ... inner-id*** ... ...) ...)]
                       [(post-guard* i-post-guard*) (generate-temporaries #'(post-guard* i-post-guard*))]
                       [(post-guard** i-post-guard**) (generate-temporaries #'(post-guard** i-post-guard**))]
+                      [(post-guard***) (generate-temporaries #'(post-guard***))]
                       [(ok) (generate-temporaries #'(ok))])
          (for-clause-syntax-protect
           #'(;; outer bindings
              ([(eb.outer-id ...) eb.outer-rhs] ...
-              [(pos-guard-id) (lambda (outer-id*** ... ... loop-id*** ...)
-                                (let ([eb.outer-id outer-id***] ... ...)
-                                  (let ([eb.loop-id loop-id***] ...)
-                                    eb.pos-guard)))]
+              [(pos-guard-id) (lambda/ribs (eb.outer-id ... ...) (eb.loop-id ...)
+                                eb.pos-guard)]
               [(i-outer-check-id) (lambda (eb-i.outer-id ... ...) eb-i.outer-check)]
-              [(i-loop-arg-id) (lambda (i-outer-id**** ... ... i-loop-id**** ... i-inner-id**** ... ...)
-                                 (let ([eb-i.outer-id i-outer-id****] ... ...)
-                                   (let ([eb-i.loop-id i-loop-id****] ...)
-                                     (let ([eb-i.inner-id i-inner-id****] ... ...)
-                                       i-loop-arg**))))] ...)
+              [(i-loop-arg-id) (lambda/ribs (eb.outer-id ... ...) (eb.loop-id ...) (eb.inner-id ... ...)
+                                            (eb-i.outer-id ... ...) (eb-i.loop-id ...) (eb-i.inner-id ... ...)
+                                 eb-i.loop-arg)] ...)
              ;; outer check
              eb.outer-check
              ;; loop bindings
@@ -602,10 +612,8 @@
              ([(i-loop-id** ... loop-id** ... ok eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
                 inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**)
                (let ([eb.loop-id loop-id*] ...
-                     [loop-arg-id (lambda (loop-id*** ... inner-id*** ... ...)
-                                    (let ([eb.loop-id loop-id***] ...)
-                                      (let ([eb.inner-id inner-id***] ... ...)
-                                        loop-arg**)))] ...)
+                     [loop-arg-id (lambda/ribs (eb.loop-id ...) (eb.inner-id ... ...)
+                                    eb.loop-arg)] ...)
                  (define (loop-with-inner loop-id*** ...
                                           post-guard* i-post-guard*
                                           inner-id*** ... ... i-outer-id**** ... ... i-loop-id**** ...)
@@ -614,14 +622,33 @@
                        (let ([eb-i.outer-id i-outer-id****] ... ...)
                          (let ([eb-i.loop-id i-loop-id****] ...)
                            (cond
+                             ;; G' = G/eb.outer-id ... .../eb.loop-id ...
+                             ;;       /eb.loop-id .../eb.inner-id ... ...
+                             ;;       /eb-i.outer-id ... .../eb-i.loop-id ...
+                             ;; eb-i.pos-guard : Expr[G'][Any]
+                             ;; eb-i.inner-rhs : Expr[G'][eb-i.I]
                              [eb-i.pos-guard
                               (let-values ([(eb-i.inner-id ...) eb-i.inner-rhs] ...)
+                                ;; eb-i.pre-guard : Expr[G/eb.outer-id ... .../eb.loop-id ...
+                                ;;                        /eb.loop-id .../eb.inner-id ... ...
+                                ;;                        /eb-i.outer-id ... .../eb-i.loop-id ...
+                                ;;                        /eb-i.inner-id ... ...][Any]
                                 (if (and eb-i.pre-guard
                                          i-post-guard*)
                                     ;; Case 1
+                                    ;; i-loop-arg* : Expr[G/eb.outer-id ... ...
+                                    ;;                     /eb.loop-id .../eb.inner-id ... ...
+                                    ;;                     /eb-i.outer-id ... .../eb-i.loop-id ...
+                                    ;;                     /eb-i.inner-id ... ...][eb-i.L]
+                                    ;; G' = [G/eb.outer-id ... .../eb.loop-id ...
+                                    ;;        /eb.loop-id .../eb.inner-id ... ...
+                                    ;;        /eb-i.outer-id ... .../eb-i.loop-id ...
+                                    ;;        /eb-i.inner-id ... ...]
+                                    ;; eb-i.eb-i.inner-id : Expr[G'][eb-i.I] ... ...
+                                    ;; eb-i.pre-guard : Expr[G'][Any]
                                     (values i-loop-arg* ... loop-id*** ... #t
                                             eb-i.outer-id ... ... eb-i.loop-id ... eb-i.inner-id ... ...
-                                            eb.inner-id ... ... eb-i.outer-id ... ... #t
+                                            inner-id*** ... ... i-outer-id**** ... ... #t
                                             post-guard* eb-i.post-guard)
                                     (loop-without-inner loop-id*** ... post-guard*)))]
                              [else
@@ -629,15 +656,29 @@
                  (define (loop-without-inner eb.loop-id ... post-guard*)
                    (cond
                      [pos-guard-id*
-                      (let-values ([(eb.inner-id ...) eb.inner-rhs] ...)
+                      ;; G' = [G/eb.outer-id ... .../eb.loop-id ...
+                      ;;        /eb.loop-id ...]
+                      (let*-values ([(eb.inner-id ...) eb.inner-rhs] ...
+                                    [(inner-id***) eb.inner-id] ... ...
+                                    [(loop-id***) eb.loop-id] ...
+                                    ;; G'' = [G'/eb.inner-id ... ...]
+                                    ;; eb.post-guard : Expr[G''][Any]
+                                    [(post-guard***) eb.post-guard])
+                        ;; eb.pre-guard : Expr[G''][Any]
                         (if (and eb.pre-guard
                                  post-guard*)
                             ;; Case 2
+                            ;; eb-i.outer-rhs : Expr[G''][eb-i.O]
                             (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...)
                               i-outer-check*
+                              ;; loop-arg* : Expr[G/eb.outer-id ... ...
+                              ;;                   /eb.loop-id ...
+                              ;;                   /eb.inner-id ... ...][eb.L]
+                              ;; G''' = [G''/eb-i.outer-id ... ...]
+                              ;; eb-i.loop-expr : Expr[G'''][eb-i.L]
                               (loop-with-inner loop-arg* ...
-                                               eb.post-guard #t
-                                               eb.inner-id ... ...
+                                               post-guard*** #t
+                                               inner-id*** ... ...
                                                eb-i.outer-id ... ...
                                                eb-i.loop-expr ...))
                             (outer-is-done)))]
@@ -663,19 +704,47 @@
              (loop-id** ... i-loop-id** ... inner-id** ... i-outer-id** ... ids-ok* post-guard** i-post-guard**))))]))
 
   ;; make-mark-as-variables : xs:(Listof Id)
-  ;;                       -> Syntax[ContainsExpr[G]]
-  ;;                       -> Syntax[ContainsExpr[G/xs]]
+  ;;                       -> ∃fresh(xs')
+  ;;                          (Syntax[Expr[G//xs]] -> Syntax[Expr[G/xs'//]])
+  ;; where xs' is {(x-symbol, x-scope U {intdef-scope}), ...}
+  ;; and also update the global environment so that it maps (x-symbol, x-scope U {intdef-scope}) to Variable, ...
+  ;;
+  ;;                     old: xs:(Listof Id) -> Syntax[ContainsExpr[G]] -> Syntax[ContainsExpr[G/xs]]
   (define (make-mark-as-variables xs)
+    ;; old:
     ;; contains both (Id => Symbol) renaming
     ;; AND syntax environment rib (Symbol => Denotation)
+    ;;
+    ;; Contains a scope to represent the context. The scope is added to
+    ;; every form within the context. A scope is represented as a unique
+    ;; "token" (a value internal to the program representation).
+    ;; The global environment (a table) maps a pair (symbol, scope set)
+    ;; to its meaning (a variable, a syntactic form, or a transformer).
     (define intdef (syntax-local-make-definition-context))
-    ;; adds to renaming and env rib
+    ;; adds to scope and the global environment
     (syntax-local-bind-syntaxes xs #f intdef)
+    ;; old:
     ;; now intdef contains
     ;; mapping { x => fresh1, ... }
     ;; env rib { fresh1 : Var, ... }
+    ;;
+    ;; now intdef contains
+    ;; scope set {intdef-scope}
+    ;; the global env contains
+    ;; mapping { (x-symbol, x-scope U {intdef-scope}) => Variable, ...}
     (lambda (stx)
       (internal-definition-context-introduce intdef stx 'add))))
+
+#|
+(begin-for-syntax
+  (define (mark-as-vars1) (make-mark-as-variables (syntax-list #'(x))))
+  (define (mark-as-vars2) (make-mark-as-variables (syntax-list #'(x)))))
+(let-syntax ([m (lambda (stx)
+                  (with-syntax ([x1 (mark-as-vars1 #'x)]
+                                [x2 (mark-as-vars2 #'x)])
+                    #'(let ([x1 5]) x2)))])
+  m)
+|#
 
 (define-sequence-syntax do/sequence2
   (lambda (stx)
@@ -683,8 +752,13 @@
   (lambda (stx)
     (syntax-parse stx
       [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+       ;; b-clause : BindingClause[G][{b-clause.id ...}]
+       ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
        #:attr mark-as-variables (make-mark-as-variables
                                  (syntax->list #'(b-clause.id1 ... ...)))
+       ;; mark-as-variables :
+       ;; ∃(xs') (Syntax[Expr[G/{b-clause.id ...}]]
+       ;;                  -> Syntax[Expr[G/xs']])
        #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
                                                  #`[#,((attribute mark-as-variables) ids) #,seq-expr])
                                                (syntax->list #'((b-clause.id1 ...) ...))
@@ -692,6 +766,27 @@
        #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
        #:with eb-i:expanded-clause-record
               (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
+       #:with ecr:expanded-clause-record (nest #'(eb eb-i))
+       #'[(id ...)
+          (:do-in
+           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+           ecr.outer-check
+           ([ecr.loop-id ecr.loop-expr] ...)
+           ecr.pos-guard
+           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+           ecr.pre-guard
+           ecr.post-guard
+           (ecr.loop-arg ...))]]
+      [_ (raise-syntax-error #f "got something else" stx)])))
+
+#;(define-sequence-syntax do/sequence2
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+       #:with eb:expanded-clause-record (merge #'(b-clause.expanded ...))
+       #:with eb-i:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        #:with ecr:expanded-clause-record (nest #'(eb eb-i))
        #'[(id ...)
           (:do-in

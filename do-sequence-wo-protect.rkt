@@ -51,6 +51,49 @@
            (ecr.loop-arg ...))]]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
+  ;; make-mark-as-variables : xs:(Listof Id)
+  ;;                       -> Syntax[ContainsExpr[G]]
+  ;;                       -> Syntax[ContainsExpr[G/xs]]
+  (define-for-syntax (make-mark-as-variables xs)
+    ;; contains both (Id => Symbol) renaming
+    ;; AND syntax environment rib (Symbol => Denotation)
+    (define intdef (syntax-local-make-definition-context))
+    ;; adds to renaming and env rib
+    (syntax-local-bind-syntaxes xs #f intdef)
+    ;; now intdef contains
+    ;; mapping { x => fresh1, ... }
+    ;; env rib { fresh1 : Var, ... }
+    (lambda (stx)
+      (internal-definition-context-introduce intdef stx 'add)))
+
+#;(define-sequence-syntax do/sequence2*
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+       #:attr mark-as-variables (make-mark-as-variables
+                                 (syntax->list #'(b-clause.id1 ... ...)))
+       #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
+                                                 #`[#,((attribute mark-as-variables) ids) #,seq-expr])
+                                               (syntax->list #'((b-clause.id1 ...) ...))
+                                               (syntax->list #'(b-clause.seq ...)))
+       #:with eb:expanded-clause-record (merge* #'(b-clause*.expanded ...))
+       #:with eb-i:expanded-clause-record
+              (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
+       #:with ecr:expanded-clause-record (nest #'(eb eb-i))
+       #'[(id ...)
+          (:do-in
+           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+           ecr.outer-check
+           ([ecr.loop-id ecr.loop-expr] ...)
+           ecr.pos-guard
+           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+           ecr.pre-guard
+           ecr.post-guard
+           (ecr.loop-arg ...))]]
+      [_ (raise-syntax-error #f "got something else" stx)])))
+
 (define-sequence-syntax do/sequence*
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))

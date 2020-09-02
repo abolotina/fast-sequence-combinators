@@ -61,14 +61,16 @@
   (append seq-when-pairs*
           (merges seq-when-pairs* seq-when-pairs*)))
 
+(define (make-ids sw ids)
+  (match (car sw)
+    [(list* 'in-merge rest) ids]
+    [e (list (car ids))]))
+
+(define (bind-when sw ids)
+  (let ([ids* (make-ids sw ids)])
+    (values `[,ids* ,(car sw)] (apply (cadr sw) ids*))))
+
 (define (make-test sw1 . sws)
-  (define (make-ids sw ids)
-    (match (car sw)
-      [(list* 'in-merge rest) ids]
-      [e (list (car ids))]))
-  (define (bind-when sw ids)
-    (let ([ids* (make-ids sw ids)])
-      (values `[,ids* ,(car sw)] (apply (cadr sw) ids*))))
   (define o (open-output-string))
   (cond
     [(empty? sws)
@@ -101,13 +103,30 @@
               (display do/seq o)
               (get-output-string o)))))]))
 
+(define (make-do/seq2-test sw1 sw2)
+  (define o (open-output-string))
+  (let*-values ([(b1 w1) (bind-when sw1 '(x y))]
+                [(b2) `[z ,(car sw2)]]
+                [(s2) (car sw2)]
+                [(do/seq) `(for/list ([x (do/sequence2 (,b1) ,s2)])
+                             x)])
+    `(begin
+       (display ,(begin (fprintf o "b1: ~a\n s2: ~a\n" b1 s2)
+                        (get-output-string o)))
+       (check-equal?
+        ,do/seq
+        (for/list ([x (for/list (,b1 #:when #t ,b2) z)]) x)
+        ,(begin
+           (display do/seq o)
+           (get-output-string o))))))
+
 (define seq-when-pairs2
   (for*/list ([s (in-list (caar srcs))]
               [w (in-list (cadar srcs))])
     (list s w)))
 
 (define seq-when-pairs3*
-  (for*/list ([s (in-list '((in-range x)))]
+  (for*/list ([s (in-list '((in-range x) (in-value x)))]
               [w (in-list (cadar srcs))])
     (list s w)))
 
@@ -129,11 +148,23 @@
          [sw2 (in-list seq-when-pairs3)])
     (eval (make-test sw1 sw2) ns)))
 
+(define (run-tests4 ns)
+  (for* ([sw1 (in-list seq-when-pairs2)]
+         [sw2 (in-list seq-when-pairs3*)])
+    (eval (make-do/seq2-test sw1 sw2) ns)))
+
 (define (run-tests ns)
-  (begin
-    #;(run-tests1 ns)
-    #;(run-tests2 ns)
-    (run-tests3 ns)))
+  (parameterize
+      ([error-escape-handler
+        (lambda ()
+          (abort-current-continuation
+           (default-continuation-prompt-tag)
+           (exit)))])
+    (begin
+      #;(run-tests1 ns)
+      #;(run-tests2 ns)
+      #;(run-tests3 ns)
+      (run-tests4 ns))))
 
 (define-namespace-anchor a)
 (define ns (namespace-anchor->namespace a))
