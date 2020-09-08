@@ -22,7 +22,7 @@
 
 (define-syntax (exp-for-clause stx)
   (syntax-case stx ()
-    [(_ e) (expand-for-clause (syntax 'here) (syntax e))]))
+    [(_ e) #`('#,(expand-for-clause (syntax 'here) (syntax e)))]))
 
 (begin-for-syntax
   ;; ct-seen-table : Hash[SExpr => Boolean]

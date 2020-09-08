@@ -3,7 +3,7 @@
 (require "fast-sequence-testing.rkt"
          "fast-sequence-testing-wo-protect.rkt")
 
-(test-do/seq-w/o-protect
+(test-do/seq
 
  (for/list ([(x) (do/sequence () 1)])
    2)
@@ -155,4 +155,6 @@
     z)
 
  (for/list ([z (do/sequence ([x (in-list '(2 3 4))]) x)]) (+ x z))
+
+ #;(for/list ([x (do/sequence2 ([x (list '(1 2))]) x)]) x)
 )

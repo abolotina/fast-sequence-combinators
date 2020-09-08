@@ -85,31 +85,31 @@
 
 (time* "nesting /w :do-in"
  (for/list ([x (:do-in ([(outer-seq) '((1 2 3) (4 5))])
-                       (list? outer-seq)
-                       ([outer-seq outer-seq]
-                        [inner-seq '()])
-                       #t
-                       ([(x outer-seq* inner-rest x-is-found)
-                         (let loop* ([outer-seq* outer-seq]
-                                     [inner-seq* inner-seq])
-                           (cond [(pair? inner-seq*)
-                                  (let ([x (car inner-seq*)]
-                                        [inner-rest (cdr inner-seq*)])
-                                    (cond [(odd? x)
-                                           (values x outer-seq* inner-rest #t)]
-                                          [else
-                                           (loop* outer-seq* inner-rest)]))]
-                                 [(pair? outer-seq*)
-                                  (let ([inner-lst (car outer-seq*)]
-                                        [outer-rest (cdr outer-seq*)])
-                                    (list? inner-lst)
-                                    (loop* outer-rest inner-lst))]
-                                 [else
-                                  (values #f #f #f #f)]))])
-                       x-is-found
-                       #t
-                       (outer-seq* inner-rest))])
-   x)
+                        (list? outer-seq)
+                        ([outer-seq outer-seq]
+                         [inner-seq '()])
+                        #t
+                        ([(x outer-seq inner-rest x-is-found)
+                          (let loop* ([outer-seq outer-seq]
+                                      [inner-seq inner-seq])
+                            (cond [(pair? inner-seq)
+                                   (let ([x (car inner-seq)]
+                                         [inner-rest (cdr inner-seq)])
+                                     (cond [(odd? x)
+                                            (values x outer-seq inner-rest #t)]
+                                           [else
+                                            (loop* outer-seq inner-rest)]))]
+                                  [(pair? outer-seq)
+                                   (let ([inner-lst (car outer-seq)]
+                                         [outer-rest (cdr outer-seq)])
+                                     (list? inner-lst)
+                                     (loop* outer-rest inner-lst))]
+                                  [else
+                                   (values #f #f #f #f)]))])
+                        x-is-found
+                        #t
+                        (outer-seq inner-rest))])
+    x)
  (for/list ([(x) (in-list '((1 2 3) (4 5)))]
             #:when #t
             [(z) (in-list x)])
