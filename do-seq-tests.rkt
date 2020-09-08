@@ -162,9 +162,9 @@
            (exit)))])
     (begin
       (run-tests1 ns)
-      #;(run-tests2 ns)
-      #;(run-tests3 ns)
-      #;(run-tests4 ns))))
+      (run-tests2 ns)
+      (run-tests3 ns)
+      (run-tests4 ns))))
 
 (define-namespace-anchor a)
 (define ns (namespace-anchor->namespace a))
