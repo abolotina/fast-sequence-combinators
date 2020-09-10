@@ -236,10 +236,11 @@
            (let/ribs [([arg arg*] ...) ...] body ...)))]))
 
 (begin-for-syntax
-  ;; nest : Syntax[(ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
+  ;; nest : Syntax[((Id ...) ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
   (define (nest stx)
     (syntax-parse stx
-      [(eb:expanded-clause-record
+      [((id:id ...)
+        eb:expanded-clause-record
         eb-i:expanded-clause-record)
        (with-syntax ([(post-guard* i-post-guard* inner-is-initialized? ok)
                       (generate-temporaries #'(post-guard* i-post-guard* inner-is-initialized? ok))]
@@ -247,8 +248,7 @@
                       (generate-temporaries #'(post-guard** i-post-guard** inner-is-initialized?*))]
                      [(id-false ...) (build-list
                                        (length (syntax->list #'( eb-i.loop-id ... eb.loop-id ... eb.inner-id ... ...
-                                                                eb-i.outer-id ... ... eb-i.loop-id ...
-                                                                eb-i.inner-id ... ...)))
+                                                                eb-i.outer-id ... ... id ...)))
                                        (lambda (x) #'#f))]
                      [(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
                      [(i-loop-id* ...) (generate-temporaries #'(eb-i.loop-id ...))]
@@ -257,7 +257,8 @@
                      [((inner-id* ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))]
                      [((i-outer-id* ...) ...) (gen-temp-tree 2 #'((eb-i.outer-id ...) ...))]
                      [(loop-id** ...) (generate-temporaries #'(eb.loop-id ...))]
-                     [((inner-id** ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))])
+                     [((inner-id** ...) ...) (gen-temp-tree 2 #'((eb.inner-id ...) ...))]
+                     [((i-outer-id** ...) ...) (gen-temp-tree 2 #'((eb-i.outer-id ...) ...))])
          (for-clause-syntax-protect
           #'(;; outer bindings
              ([(eb.outer-id ...) eb.outer-rhs] ...)
@@ -274,10 +275,8 @@
              ;; pos check
              #t
              ;; inner bindings
-             ([(i-loop-id** ... loop-id** ... inner-id** ... ... eb-i.outer-id ... ...
-                eb-i.loop-id ... eb-i.inner-id ... ...
-                post-guard** i-post-guard**
-                inner-is-initialized?* ok)
+             ([(i-loop-id** ... loop-id** ... inner-id** ... ... i-outer-id** ... ...
+                id ... post-guard** i-post-guard** inner-is-initialized?* ok)
                (let ()
                  (define (loop-with-inner loop-id* ... inner-id* ... ...
                                           i-outer-id* ... ... i-loop-id* ...
@@ -293,8 +292,7 @@
                                          i-post-guard*)
                                     ;; Case 1
                                     (values eb-i.loop-arg ... loop-id* ... inner-id* ... ...
-                                            i-outer-id* ... ...
-                                            i-loop-id* ... eb-i.inner-id ... ...
+                                            i-outer-id* ... ... id ...
                                             post-guard* eb-i.post-guard
                                             #t #t)
                                     (loop-without-inner loop-id* ... post-guard*)))]
@@ -335,7 +333,7 @@
              (loop-id** ...
               inner-id** ... ...
               i-loop-id** ...
-              eb-i.outer-id ... ...
+              i-outer-id** ... ...
               inner-is-initialized?*
               post-guard**
               i-post-guard**))))]))
@@ -344,14 +342,7 @@
   ;;                       -> ∃fresh(xs')
   ;;                          (Syntax[Expr[G//xs]] -> Syntax[Expr[G/xs'//]])
   ;; where xs' is {(x-symbol, x-scope U {intdef-scope}), ...}
-  ;; and also update the global environment so that it maps (x-symbol, x-scope U {intdef-scope}) to Variable, ...
-  ;;
-  ;;                     old: xs:(Listof Id) -> Syntax[ContainsExpr[G]] -> Syntax[ContainsExpr[G/xs]]
   (define (make-mark-as-variables xs)
-    ;; old:
-    ;; contains both (Id => Symbol) renaming
-    ;; AND syntax environment rib (Symbol => Denotation)
-    ;;
     ;; Contains a scope to represent the context. The scope is added to
     ;; every form within the context. A scope is represented as a unique
     ;; "token" (a value internal to the program representation).
@@ -360,11 +351,6 @@
     (define intdef (syntax-local-make-definition-context))
     ;; adds to scope and the global environment
     (syntax-local-bind-syntaxes xs #f intdef)
-    ;; old:
-    ;; now intdef contains
-    ;; mapping { x => fresh1, ... }
-    ;; env rib { fresh1 : Var, ... }
-    ;;
     ;; now intdef contains
     ;; scope set {intdef-scope}
     ;; the global env contains
@@ -382,6 +368,96 @@
                     #'(let ([x1 5]) x2)))])
   m)
 |#
+
+;; protect : (Listof Id) Syntax[ECR[G][G']] -> 
+#;(define-for-syntax (protect binding-ids stx)
+  (syntax-parse stx
+    [(([(outer-id ...) outer-rhs] ...)
+      outer-check
+      ([loop-id loop-expr] ...)
+      pos-guard
+      ([(inner-id ...) inner-rhs] ...)
+      pre-guard
+      post-guard
+      (loop-arg ...))
+     ;; ==>
+     #:attr o-mark-as-variables (make-mark-as-variables
+                                 (subtract (syntax->list #'(outer-id ... ...)) binding-ids))
+     #:attr l-mark-as-variables (make-mark-as-variables
+                                 (subtract (syntax->list #'(loop-id ...)) binding-ids))
+     #:attr i-mark-as-variables (make-mark-as-variables
+                                 (subtract (syntax->list #'(inner-id ... ...)) binding-ids))
+     ((attribute o-mark-as-variables)
+      #`(([(outer-id ...) outer-rhs] ...)
+         outer-check
+         #,@((attribute l-mark-as-variables)
+             #`(([loop-id loop-expr] ...)
+                pos-guard
+                #,@((attribute i-mark-as-variables)
+                    #'(([(inner-id ...) inner-rhs] ...)
+                       pre-guard
+                       post-guard
+                       (loop-arg ...)))))))]))
+
+#;(define-sequence-syntax do/sequence2
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+       ;; b-clause : BindingClause[G][{b-clause.id ...}]
+       ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
+       #:attr mark-as-variables (make-mark-as-variables
+                                 (syntax->list #'(b-clause.id1 ... ...)))
+       ;; mark-as-variables :
+       ;; ∃(xs') (Syntax[Expr[G/{b-clause.id ...}]]
+       ;;                  -> Syntax[Expr[G/xs']])
+       #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
+                                                 #`[#,((attribute mark-as-variables) ids) #,seq-expr])
+                                               (syntax->list #'((b-clause.id1 ...) ...))
+                                               (syntax->list #'(b-clause.seq ...)))
+       #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
+       #:with eb-i:expanded-clause-record
+              (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
+       #:with eb-i* (syntax-parse #'eb-i
+                    [(([(outer-id ...) outer-rhs] ...)
+                      outer-check
+                      ([loop-id loop-expr] ...)
+                      pos-guard
+                      ([(inner-id ...) inner-rhs] ...)
+                      pre-guard
+                      post-guard
+                      (loop-arg ...))
+                     ;; ==>
+                     #:attr o-mark-as-variables (make-mark-as-variables
+                                                 (syntax->list #'(outer-id ... ...)))
+                     #:attr l-mark-as-variables (make-mark-as-variables
+                                                 (syntax->list #'(loop-id ...)))
+                     #:attr i-mark-as-variables (make-mark-as-variables
+                                                 (syntax->list #'(inner-id ... ...)))
+                     ((attribute o-mark-as-variables)
+                      #`(([(outer-id ...) outer-rhs] ...)
+                         outer-check
+                         #,@((attribute l-mark-as-variables)
+                             #`(([loop-id loop-expr] ...)
+                                pos-guard
+                                #,@((attribute i-mark-as-variables)
+                                    #'(([(inner-id ...) inner-rhs] ...)
+                                       pre-guard
+                                       post-guard
+                                       (loop-arg ...)))))))])
+       #:with ecr:expanded-clause-record (nest #'(eb eb-i*))
+       #'[(id ...)
+          (:do-in
+           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+           ecr.outer-check
+           ([ecr.loop-id ecr.loop-expr] ...)
+           ecr.pos-guard
+           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+           ecr.pre-guard
+           ecr.post-guard
+           (ecr.loop-arg ...))]]
+      [_ (raise-syntax-error #f "got something else" stx)])))
 
 (define-sequence-syntax do/sequence2
   (lambda (stx)
@@ -403,28 +479,7 @@
        #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
        #:with eb-i:expanded-clause-record
               (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
-       #:with ecr:expanded-clause-record (nest #'(eb eb-i))
-       #'[(id ...)
-          (:do-in
-           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
-           ecr.outer-check
-           ([ecr.loop-id ecr.loop-expr] ...)
-           ecr.pos-guard
-           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
-           ecr.pre-guard
-           ecr.post-guard
-           (ecr.loop-arg ...))]]
-      [_ (raise-syntax-error #f "got something else" stx)])))
-
-#;(define-sequence-syntax do/sequence2
-  (lambda (stx)
-    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-  (lambda (stx)
-    (syntax-parse stx
-      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
-       #:with eb:expanded-clause-record (merge #'(b-clause.expanded ...))
-       #:with eb-i:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
-       #:with ecr:expanded-clause-record (nest #'(eb eb-i))
+       #:with ecr:expanded-clause-record (nest #'((id ...) eb eb-i))
        #'[(id ...)
           (:do-in
            ([(ecr.outer-id ...) ecr.outer-rhs] ...)

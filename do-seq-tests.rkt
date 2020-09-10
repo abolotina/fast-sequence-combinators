@@ -126,7 +126,7 @@
     (list s w)))
 
 (define seq-when-pairs3*
-  (for*/list ([s (in-list '((in-range x) (in-value x)))]
+  (for*/list ([s (in-list '((in-range x) (in-value x) x))]
               [w (in-list (cadar srcs))])
     (list s w)))
 
@@ -161,8 +161,8 @@
            (default-continuation-prompt-tag)
            (exit)))])
     (begin
-      #;(run-tests1 ns)
-      #;(run-tests2 ns)
+      (run-tests1 ns)
+      (run-tests2 ns)
       (run-tests3 ns)
       (run-tests4 ns))))
 
