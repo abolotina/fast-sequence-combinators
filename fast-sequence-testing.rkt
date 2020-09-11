@@ -8,14 +8,12 @@
          rackunit
          "fast-sequence-filter.rkt"
          "fast-sequence-map.rkt"
-         "do-sequence.rkt"
-         "do-sequence-wo-protect.rkt")
+         "do-sequence.rkt")
 
 (provide exp-for-clause
          test-once
          check-fast-seq-combinators
          test-do/seq
-         #;list-nest
          (all-from-out "fast-sequence-filter.rkt")
          (all-from-out "fast-sequence-map.rkt")
          (all-from-out "do-sequence.rkt"))
@@ -196,25 +194,3 @@
   (syntax-parse stx
     [(_ test ...)
      #'(begin (test-do/seq* test) ...)]))
-
-#;(define (sequence-nest s)
-  (unless (sequence? s) (raise-argument-error 'sequence-nest "sequence?" s))
-  (make-do-sequence
-   (lambda ()
-     ;; SeqPos[X ...] = (Pair (U #f (List X ...)) (-> SeqPos))
-     ;; Position[X ...] = (Pair SeqPos[Sequence[X ...]] SeqPos[X ...]])
-     (let ()
-       ;; get-elt : Position[X ...] -> (Values X ...)
-       (define (get-elt pos)
-         (apply values (cadr pos)))
-       (define (get-next pos)
-         (cond
-           ;; outer sequence is not empty
-           [(caar pos)
-            ]))
-       (values get-elt
-               tail
-               (cons vals next)
-               (lambda (pos) (or (caar pos) (cadr pos)))
-               #f
-               #f)))))

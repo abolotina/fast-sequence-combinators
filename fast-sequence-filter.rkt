@@ -62,55 +62,24 @@
                  ;; loop bindings
                  ([loop-id loop-expr] ...)
                  ;; pos check
-                 ;; outer-id ... and loop-id ... should have been bound before:
-                 ;; outer-id : a ...
-                 ;; loop-id  : c ...
-                 ;;
-                 ;; pos-guard* : Expr[G, outer-id : a, ..., loop-id : c, ...][d]
                  #t
                  ;; inner bindings
                  ([(inner-id ... ... loop-id* ... ok)
                    (let ([loop-arg-id (lambda (loop-id ...) (lambda (inner-id ... ...) loop-arg))] ...)
                      (let loop ([loop-id loop-id] ...)
-                       ;; outer-id ... and loop-id ... should have been bound before:
-                       ;; outer-id : a ...
-                       ;; loop-id  : c ...
-                       ;;
-                       ;; pos-guard* : Expr[G, outer-id : a, ..., loop-id : c, ...][d]
                        (if pos-guard
                            (let-values ([(inner-id ...) inner-rhs] ...)
-                             ;; G' = G, outer-id : a, ..., loop-id : c, ..., inner-id : e, ... ...
-                             ;;
-                             ;; inner-id : e ... ...
-                             (if (and pre-guard      ; pre-guard  : Expr[G'][p]
-                                      post-guard)    ; post-guard : Expr[G'][q]
-                                 ;; inner-id  : e ... ...
-                                 ;; loop-arg* : Expr[G'][c] ...
-                                 ;;
-                                 ;; id ... are part of inner-id : e ..., which should have been bound before
-                                 ;; id : e' ...
-                                 ;; f  : Expr[G, id : e', ...][e' ... -> t]
+                             (if (and pre-guard
+                                      post-guard)
                                  (if (f id ...)
                                      (values inner-id ... ... loop-arg* ... #t)
                                      (loop loop-arg* ...))
                                  (values false* ... #f)))
-                           ;; false* : Expr[][Boolean] ...
                            (values false* ... #f))))])
                  ;; pre guard
-                 ;; ok : Expr[][Boolean]
                  ok
                  ;; post guard
-                 ;; ok : Expr[][Boolean]
                  ok
-                 ;; G' = G, outer-id : a, ..., loop-id : c, ..., inner-id : e, ... ...
-                 ;;
-                 ;; outer-id ..., loop-id ..., and inner-id should have been bound before:
-                 ;; outer-id  : a ...
-                 ;; loop-id   : c ...
-                 ;; inner-id  : e ... ...
-                 ;;
-                 ;; loop-arg* : Expr[G'][c] ...
-                 ;; loop args
                  (loop-id* ...))]))]
          [else (raise-syntax-error #f "bad :do-in clause" expanded-for-clause #'orig-seq-exrp)])])))
 

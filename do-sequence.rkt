@@ -4,13 +4,11 @@
                      racket
                      syntax/parse
                      syntax/stx
-                     syntax/unsafe/for-transform
-                     #;macro-debugger/emit))
+                     syntax/unsafe/for-transform))
 
 (provide do/sequence
          do/sequence2
          in-nullary-relation
-         in-protect
          in-merge
          (for-syntax bind-clause
                      when-clause
@@ -25,19 +23,15 @@
 ;;   (in-nullary-relation #t) = [(values)]
 ;;   (in-nullary-relation #f) = []
 (define-sequence-syntax in-nullary-relation
-  (lambda () #'in-nullary-relation/proc)
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-case stx ()
       [[(id ...) (_ expr)]
        (for-clause-syntax-protect
         (with-syntax ([(expr*) (generate-temporaries #'(expr))])
-          #'[(id ...) (:do-in ([(expr*) (lambda () expr)]) #t () #t () (expr*) #f ()) ; workaround for a bug in Racket
-                      #;(:do-in () #t () #t () expr #f ())]))] ; original implementation
+          #'[(id ...) (:do-in ([(expr*) (lambda () expr)]) #t () #t () (expr*) #f ())]))]
       [_ #f])))
-
-;;ryan: The procedure version is wrong. But see the comment far below
-;;  about do/sequence and for/list.
-(define (in-nullary-relation/proc expr) '())
 
 ;; An expanded clause record. Contains information to fill in the loop
 ;; skeleton: how to start looping, how to decide whether to stop,
@@ -51,8 +45,7 @@
               ([(inner-id ...) inner-rhs] ...)
               pre-guard
               post-guard
-              (loop-arg ...)]
-             #:attr protected (delay (protect-bindings this-syntax))))
+              (loop-arg ...)]))
   
   ;; A binding clause.
   ;;
@@ -96,60 +89,6 @@
       [(zero? n) (car (generate-temporaries xs))]
       [(= n 1) (generate-temporaries xs)]
       [else (map (lambda (x) (gen-temp-tree (sub1 n) x)) (stx->list xs))]))
-
-  ;; protect-bindings : Syntax[ECR[G][G']] -> Syntax[PECR[G][G']]
-  (define (protect-bindings stx)
-    (syntax-parse stx
-      [ecr:expanded-clause-record
-       (with-syntax ([(ecr-loop-expr* ...) (generate-temporaries #'(ecr.loop-id ...))]
-                     [(ecr-outer-check*) (generate-temporaries #'(outer-check))]
-                     [(ecr-pos-guard*) (generate-temporaries #'(pos-guard))]
-                     [(ecr-inner-rhs* ...) (generate-temporaries
-                                            (map (lambda (x) 'inner-rhs) (syntax->list #'(ecr.inner-rhs ...))))]
-                     [(ecr-pre-guard*) (generate-temporaries #'(pre-guard))]
-                     [(ecr-post-guard*) (generate-temporaries #'(post-guard))]
-                     [(ecr-loop-arg* ...) (generate-temporaries #'(ecr.loop-id ...))]
-                     [(loop-id* ...) (generate-temporaries #'(ecr.loop-id ...))]
-                     [((inner-id* ...) ...) (gen-temp-tree 2 #'((ecr.inner-id ...) ...))])
-         #'(;; outer bindings
-            ([(ecr.outer-id ...) ecr.outer-rhs] ...
-             [(ecr-outer-check*) (lambda (ecr.outer-id ... ...) ecr.outer-check)]
-             [(ecr-loop-expr*) (lambda (ecr.outer-id ... ...) ecr.loop-expr)] ...
-             [(ecr-pos-guard*) (lambda (ecr.outer-id ... ... loop-id* ...)
-                                 (let ([ecr.loop-id loop-id*] ...) ecr.pos-guard))]
-             [(ecr-inner-rhs*) (lambda (ecr.outer-id ... ... loop-id* ...)
-                                 (let ([ecr.loop-id loop-id*] ...) ecr.inner-rhs))] ...
-             [(ecr-pre-guard*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
-                                 (let ([ecr.loop-id loop-id*] ...)
-                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.pre-guard)))]
-             [(ecr-post-guard*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
-                                 (let ([ecr.loop-id loop-id*] ...)
-                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.post-guard)))]
-             [(ecr-loop-arg*) (lambda (ecr.outer-id ... ... loop-id* ... inner-id* ... ...)
-                                 (let ([ecr.loop-id loop-id*] ...)
-                                   (let ([ecr.inner-id inner-id*] ... ...) ecr.loop-arg)))] ...)
-            ;; outer check
-            (ecr-outer-check* ecr.outer-id ... ...)
-            ;; loop bindings
-            ([ecr.loop-id (ecr-loop-expr* ecr.outer-id ... ...)] ...)
-            ;; pos check
-            (ecr-pos-guard* ecr.outer-id ... ...
-                            ecr.loop-id ...)
-            ;; inner bindings
-            ([(ecr.inner-id ...) (ecr-inner-rhs* ecr.outer-id ... ...
-                                                 ecr.loop-id ...)] ...)
-            ;; pre guard
-            (ecr-pre-guard* ecr.outer-id ... ...
-                            ecr.loop-id ...
-                            ecr.inner-id ... ...)
-            ;; post guard
-            (ecr-post-guard* ecr.outer-id ... ...
-                             ecr.loop-id ...
-                             ecr.inner-id ... ...)
-            ;; loop args
-            ((ecr-loop-arg* ecr.outer-id ... ...
-                            ecr.loop-id ...
-                            ecr.inner-id ... ...) ...)))]))
   
   (define (merge stx)
     (syntax-parse stx
@@ -169,33 +108,7 @@
           ;; post guard
           (and ecr.post-guard ...)
           ;; loop args
-          (ecr.loop-arg ... ...))]))
-
-  #;(define (merge stx)
-    (define result (merge* stx))
-    #;(emit-remark "merging" stx "produced" result)
-    #;(emit-local-step stx result #:id #'for)
-    result))
-
-(define-sequence-syntax in-protect
-  (lambda (stx)
-    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-  (lambda (stx)
-    (syntax-parse stx
-      [[(id:id ...) (_ seq-expr:expr)]
-       #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
-       #:with pecr:expanded-clause-record #'ecr.protected
-       (for-clause-syntax-protect
-        #'[(id ...)
-           (:do-in
-            ([(pecr.outer-id ...) pecr.outer-rhs] ...)
-            pecr.outer-check
-            ([pecr.loop-id pecr.loop-expr] ...)
-            pecr.pos-guard
-            ([(pecr.inner-id ...) pecr.inner-rhs] ...)
-            pecr.pre-guard
-            pecr.post-guard
-            (pecr.loop-arg ...))])])))
+          (ecr.loop-arg ... ...))])))
 
 ;; Elements of all seq-expr's must be single-valued. Behaves like in-parallel.
 (define-sequence-syntax in-merge
@@ -218,22 +131,6 @@
             mecr.pre-guard
             mecr.post-guard
             (mecr.loop-arg ...))])])))
-
-(define-syntax (let/ribs stx)
-  (syntax-parse stx
-    [(let/ribs [([id1 expr1] ...) ([id2 expr2] ...) ...+] body ...+)
-     #'(let ([id1 expr1] ...)
-         (let/ribs [([id2 expr2] ...) ...] body ...))]
-    [(let/ribs [([id expr] ...)] body ...+)
-     #'(let ([id expr] ...)
-         body ...)]))
-
-(define-syntax (lambda/ribs stx)
-  (syntax-parse stx
-    [(_ [(arg ...) ...+] body ...+)
-     (with-syntax ([((arg* ...) ...) (gen-temp-tree 2 #'((arg ...) ...))])
-       #'(lambda (arg* ... ...)
-           (let/ribs [([arg arg*] ...) ...] body ...)))]))
 
 (begin-for-syntax
   ;; nest : Syntax[((Id ...) ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
@@ -358,107 +255,6 @@
     (lambda (stx)
       (internal-definition-context-introduce intdef stx 'add))))
 
-#|
-(begin-for-syntax
-  (define (mark-as-vars1) (make-mark-as-variables (syntax-list #'(x))))
-  (define (mark-as-vars2) (make-mark-as-variables (syntax-list #'(x)))))
-(let-syntax ([m (lambda (stx)
-                  (with-syntax ([x1 (mark-as-vars1 #'x)]
-                                [x2 (mark-as-vars2 #'x)])
-                    #'(let ([x1 5]) x2)))])
-  m)
-|#
-
-;; protect : (Listof Id) Syntax[ECR[G][G']] -> 
-#;(define-for-syntax (protect binding-ids stx)
-  (syntax-parse stx
-    [(([(outer-id ...) outer-rhs] ...)
-      outer-check
-      ([loop-id loop-expr] ...)
-      pos-guard
-      ([(inner-id ...) inner-rhs] ...)
-      pre-guard
-      post-guard
-      (loop-arg ...))
-     ;; ==>
-     #:attr o-mark-as-variables (make-mark-as-variables
-                                 (subtract (syntax->list #'(outer-id ... ...)) binding-ids))
-     #:attr l-mark-as-variables (make-mark-as-variables
-                                 (subtract (syntax->list #'(loop-id ...)) binding-ids))
-     #:attr i-mark-as-variables (make-mark-as-variables
-                                 (subtract (syntax->list #'(inner-id ... ...)) binding-ids))
-     ((attribute o-mark-as-variables)
-      #`(([(outer-id ...) outer-rhs] ...)
-         outer-check
-         #,@((attribute l-mark-as-variables)
-             #`(([loop-id loop-expr] ...)
-                pos-guard
-                #,@((attribute i-mark-as-variables)
-                    #'(([(inner-id ...) inner-rhs] ...)
-                       pre-guard
-                       post-guard
-                       (loop-arg ...)))))))]))
-
-#;(define-sequence-syntax do/sequence2
-  (lambda (stx)
-    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-  (lambda (stx)
-    (syntax-parse stx
-      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
-       ;; b-clause : BindingClause[G][{b-clause.id ...}]
-       ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
-       #:attr mark-as-variables (make-mark-as-variables
-                                 (syntax->list #'(b-clause.id1 ... ...)))
-       ;; mark-as-variables :
-       ;; ∃(xs') (Syntax[Expr[G/{b-clause.id ...}]]
-       ;;                  -> Syntax[Expr[G/xs']])
-       #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
-                                                 #`[#,((attribute mark-as-variables) ids) #,seq-expr])
-                                               (syntax->list #'((b-clause.id1 ...) ...))
-                                               (syntax->list #'(b-clause.seq ...)))
-       #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
-       #:with eb-i:expanded-clause-record
-              (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
-       #:with eb-i* (syntax-parse #'eb-i
-                    [(([(outer-id ...) outer-rhs] ...)
-                      outer-check
-                      ([loop-id loop-expr] ...)
-                      pos-guard
-                      ([(inner-id ...) inner-rhs] ...)
-                      pre-guard
-                      post-guard
-                      (loop-arg ...))
-                     ;; ==>
-                     #:attr o-mark-as-variables (make-mark-as-variables
-                                                 (syntax->list #'(outer-id ... ...)))
-                     #:attr l-mark-as-variables (make-mark-as-variables
-                                                 (syntax->list #'(loop-id ...)))
-                     #:attr i-mark-as-variables (make-mark-as-variables
-                                                 (syntax->list #'(inner-id ... ...)))
-                     ((attribute o-mark-as-variables)
-                      #`(([(outer-id ...) outer-rhs] ...)
-                         outer-check
-                         #,@((attribute l-mark-as-variables)
-                             #`(([loop-id loop-expr] ...)
-                                pos-guard
-                                #,@((attribute i-mark-as-variables)
-                                    #'(([(inner-id ...) inner-rhs] ...)
-                                       pre-guard
-                                       post-guard
-                                       (loop-arg ...)))))))])
-       #:with ecr:expanded-clause-record (nest #'(eb eb-i*))
-       #'[(id ...)
-          (:do-in
-           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
-           ecr.outer-check
-           ([ecr.loop-id ecr.loop-expr] ...)
-           ecr.pos-guard
-           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
-           ecr.pre-guard
-           ecr.post-guard
-           (ecr.loop-arg ...))]]
-      [_ (raise-syntax-error #f "got something else" stx)])))
-
 (define-sequence-syntax do/sequence2
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
@@ -492,10 +288,6 @@
            (ecr.loop-arg ...))]]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
-;;ryan: Since for/list doesn't work for multiple-valued sequences,
-;;  maybe it would be better to just raise a syntax error if do/sequence
-;;  is used as an expression. We could always change it later.
-
 (define-sequence-syntax do/sequence
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
@@ -511,144 +303,3 @@
        (for-clause-syntax-protect
         #'[(id ...) (do/sequence2 (b.b ...) (do/sequence rest body ...))])]
       [_ #f])))
-
-;; ----------
-
-#;(for ([() (do/sequence () 1)])
-  (println 2))
-
-#;(for ([(x) (do/sequence (#:when #t) 1)])
-  (println x))
-
-#;(for ([(x) (do/sequence (#:when #f) 1)])
-  (println x))
-
-#;(for ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))] #:when (odd? x)) x)])
-  (println x))
-
-#;(for ([(x y) (do/sequence (#:when #t
-                           [(x) (in-list '(1 2 3 4 5))]
-                           [(y) (in-list '(a b c d e))])
-             (values x y))])
-  (println (list x y)))
-
-#;(for ([(x y) (do/sequence (#:when #t
-                           [x (in-list '(1 2 3 4 5))]
-                           [y (in-list '(#\A #\B #\c #\d #\e))]
-                           #:when (odd? x)
-                           #:when (char-upper-case? y))
-             (values x y))])
-  (println (list x y)))
-
-#;(for ([(x) (do/sequence (#:when #t #:when (odd? 2) [(x*) (in-list '(1 2 3 4 5))]) x*)])
-  (println x))
-
-#;(for ([(a b) (do/sequence ([(a) (in-list '(1 2 3 4 5))]
-                           [(z) (in-list '(a b c d e))]
-                           #:when (odd? a))
-               (values a z))])
-  (println (list a b)))
-
-#;(for ([(a b) (do/sequence ([(y) (in-list '(1 2 3 4 5))] #:when (odd? y)
-                           [(z) (in-list '(a b c d e))])
-             (values y z))])
-  (println (list a b)))
-
-#;(for ([(x) (do/sequence ([(x) (in-list '((1 2) (3 4) (5 6)))]
-                         #:when guard-expr
-                         [(y) (in-list x)])
-           y)])
-  (println x))
-
-#;(for ([(x) (do/sequence (#:when #t
-                         [(x) (in-list '((1 2) (3 4) (5 6)))]
-                         #:when guard-expr
-                         [(y) (in-list x)])
-           y)])
-  (println x))
-
-#;(for ([(x) (do/sequence (#:when #f
-                         #:when #t
-                         [(x) (in-list '((1 2) (3 4) (5 6)))]
-                         #:when guard-expr
-                         [(y) (in-list x)])
-           y)])
-  (println x))
-
-#;(for ([(y) (do/sequence ([(lst) '((1 2) () (2 4) (5 6))]
-                       #:when #t
-                       [(x) (in-list lst)]
-                       #:when (odd? x))
-                      x)])
-  (println y))
-
-#;(for ([(y) (do/sequence ([(x) (do/sequence ([(seq) (in-list '((1 2) (3 4) (5 6)))]
-                                            #:when guard-expr
-                                            [(x*) (in-list seq)])
-                                           x*)])
-                        x)])
-  (println y))
-
-#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         #:when (odd? (caadr outer-lst1))
-                         [(inner-lst) (in-list outer-lst1)]
-                         #:when (and (pair? inner-lst) (odd? (car inner-lst)))
-                         [(x) (in-list inner-lst)]
-                         #:when (odd? x))
-             (list x outer-lst2))])
-  (println y))
-
-#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         #:when (odd? (caadr outer-lst1))
-                         [(inner-lst x) (do/sequence ([(inner-lst) (in-list outer-lst1)]
-                                            #:when (and (pair? inner-lst) (odd? (car inner-lst)))
-                                            [(x) (in-list inner-lst)]
-                                            #:when (odd? x))
-                                (values inner-lst x))])
-             (list x outer-lst2))])
-  (println y))
-
-#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         #:when (odd? (caadr outer-lst1))
-                         [(inner-lst) (in-list outer-lst1)]
-                         #:when (and (pair? inner-lst) (odd? (car inner-lst)))
-                         [(x) (in-list inner-lst)]
-                         #:when (odd? x)
-                         [z (in-value x)])
-             (list x z outer-lst2))])
-  (println y))
-
-#;(for ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         [(outer-lst2) (in-list '(((1 2) (3 7) () (2 4) (5 6))
-                                                  ((1 2) (2 4))
-                                                  ((1 2) (3 4))))]
-                         #:when (odd? (caadr outer-lst1))
-                         [(inner-lst x z) (do/sequence ([(inner-lst) (in-list outer-lst1)]
-                                                      #:when (and (pair? inner-lst) (odd? (car inner-lst)))
-                                                      [(x z) (do/sequence ([(x) (in-list inner-lst)]
-                                                                           #:when (odd? x)
-                                                                           [(z) (in-value x)])
-                                                               (values x z))])
-                                          (values inner-lst x z))])
-             (list x z outer-lst2))])
-  (println y))
-
-#;(for ([(x) (do/sequence ([(z) (in-value 1)]) z)])
-  (println x))

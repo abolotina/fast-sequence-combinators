@@ -161,8 +161,8 @@
            (default-continuation-prompt-tag)
            (exit)))])
     (begin
-      (run-tests1 ns)
-      (run-tests2 ns)
+      #;(run-tests1 ns)
+      #;(run-tests2 ns)
       (run-tests3 ns)
       (run-tests4 ns))))
 

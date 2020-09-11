@@ -1,7 +1,6 @@
 #lang racket
 
-(require "fast-sequence-testing.rkt"
-         "fast-sequence-testing-wo-protect.rkt")
+(require "fast-sequence-testing.rkt")
 
 (test-do/seq
 
@@ -80,7 +79,7 @@
                                       x*)])
                    x)])
    y)
-#|
+
  (for/list ([(y) (do/sequence ([(outer-lst1) (in-list '(((1 2) (3 7) () (2 4) (5 6))
                                                         ((1 2) (2 4))
                                                         ((1 2) (3 4))))]
@@ -143,18 +142,16 @@
                                [y (in-list x)])
                    (list y outer-lst2))])
    y)
-|#
+
  (for/list ([(x) (do/sequence ([(z) (in-value 1)]) z)])
    x)
 
  (define x 1)
  (define y 2)
- #;(for/list ([z (do/sequence ([x (in-list (list (list x y)))]
+ (for/list ([z (do/sequence ([x (in-list (list (list x y)))]
                              [() (in-nullary-relation (odd? x))])
                  x)])
     z)
 
  (for/list ([z (do/sequence ([x (in-list '(2 3 4))]) x)]) (+ x z))
-
- #;(for/list ([x (do/sequence2 ([x (list '(1 2))]) x)]) x)
 )
