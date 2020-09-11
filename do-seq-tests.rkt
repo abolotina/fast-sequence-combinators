@@ -54,7 +54,7 @@
 (define (merges seq1 seq2)
   (for*/list ([sw1 (in-list seq1)]
               [sw2 (in-list seq2)])
-    `((in-merge (in-protect ,(car sw1)) (in-protect ,(car sw2)))
+    `((in-merge ,(car sw1) ,(car sw2))
       ,(lambda (x y) `(and ,((cadr sw1) x) ,((cadr sw2) y))))))
 
 (define seq-when-pairs  

@@ -144,7 +144,7 @@
                      [(post-guard** i-post-guard** inner-is-initialized?*)
                       (generate-temporaries #'(post-guard** i-post-guard** inner-is-initialized?*))]
                      [(id-false ...) (build-list
-                                       (length (syntax->list #'( eb-i.loop-id ... eb.loop-id ... eb.inner-id ... ...
+                                       (length (syntax->list #'(eb-i.loop-id ... eb.loop-id ... eb.inner-id ... ...
                                                                 eb-i.outer-id ... ... id ...)))
                                        (lambda (x) #'#f))]
                      [(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
