@@ -1,7 +1,8 @@
 #lang racket
 
-(require "do-sequence.rkt"
-         "do-sequence-wo-protect.rkt"
+(require fast-sequence
+         (submod fast-sequence private-for-testing)
+         "../private/fast-sequence-testing.rkt"
          "nest.rkt")
 
 (define ITER-CT 500000)
@@ -25,18 +26,7 @@
 ;; ---------------------------------------------
 ;; benchmarks
 
-(time* "protect"
- #;(for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))])
-                 x)])
-   x)
- (for/list ([(x) (in-protect (in-list '(1 2 3 4 5)))]) x)
- (for/list ([(x) (in-list '(1 2 3 4 5))]) x))
-
 (time* "merge"
- #;(for/list ([x (do/sequence* ([(x) (in-list '(1 2 3 4 5))]
-                              [(y) (in-list '(a b c d e))])
-                 (list x y))])
-   x)
  (for/list ([(x y) (in-merge (in-list '(1 2 3 4 5))
                              (in-list '(a b c d e)))])
    (list x y))
@@ -45,7 +35,7 @@
    (list x y)))
 
 (time* "nesting /w do-sequence2"
- (for/list ([x (do/sequence2* ([(x) (in-list '((1 2 3) (4 5)))])
+ (for/list ([x (do/sequence2 ([(x) (in-list '((1 2 3) (4 5)))])
                               (do/sequence ([(y) (in-list x)]) y))])
    x)
  (for/list ([(x) (in-list '((1 2 3) (4 5)))]
@@ -56,8 +46,7 @@
 ;; 1. nesting using do/sequence
 ;; 2. hand-optimized multiple for-clauses
 ;; 3. naive dynamic sequence
-;; 4. the most perfect expansion of do/sequence that I can imagine
-;;    (a hand-optimized single for-clause)
+;; 4. hand-optimized single for-clause
 
 (time* "nesting /w dynamic sequence v.1"
        (for/list ([(x) (in-concat-sequences1 '((1 2 3) (4 5)))])
@@ -166,7 +155,7 @@
    z))
 
 (time* "nesting /w do/sequence"
- (for/list ([x (do/sequence* ([(x) (in-list '((1 2 3) (4 5)))]
+ (for/list ([x (do/sequence ([(x) (in-list '((1 2 3) (4 5)))]
                               #:when #t
                               [(z) (in-list x)])
                  z)])
@@ -176,52 +165,7 @@
             [(z) (in-list x)])
    z))
 
-(time* "protect + merge"
- #;(for/list ([x (do/sequence ([(x) (in-list '(1 2 3 4 5))]
-                             [(y) (in-list '(a b c d e))])
-                   (list x y))])
-   x)
- (for/list ([(x y) (in-merge (in-protect (in-list '(1 2 3 4 5)))
-                             (in-protect (in-list '(a b c d e))))])
-   (list x y))
- (for/list ([(x) (in-list '(1 2 3 4 5))]
-            [(y) (in-list '(a b c d e))])
-   (list x y)))
-
-(time* "protect + nesting /w do-sequence2"
- (for/list ([x (do/sequence2 ([(x) (in-list '((1 2 3) (4 5)))])
-                             (do/sequence ([(y) (in-list x)]) y))])
-   x)
- (for/list ([(x) (in-list '((1 2 3) (4 5)))]
-            #:when #t
-            [(z) (in-list x)])
-   z))
-
-(time* "protect + nesting /w do-sequence"
- (for/list ([x (do/sequence ([(x) (in-list '((1 2 3) (4 5)))]
-                             #:when #t
-                             [(z) (in-list x)])
-                   z)])
-   x)
- (for/list ([(x) (in-list '((1 2 3) (4 5)))]
-            #:when #t
-            [(z) (in-list x)])
-   z))
-
 (time* "merge + nesting"
- (for/list ([x (do/sequence* ([(x) (in-list '((1 2 3) (4 5)))]
-                              [(y) (in-list '(a b c d e))]
-                              #:when #t
-                              [(z) (in-list x)])
-                 (list z y))])
-   x)
- (for/list ([(x) (in-list '((1 2 3) (4 5)))]
-            [(y) (in-list '(a b c d e))]
-            #:when #t
-            [(z) (in-list x)])
-   (list z y)))
-
-(time* "protect + merge + nesting"
  (for/list ([x (do/sequence ([(x) (in-list '((1 2 3) (4 5)))]
                              [(y) (in-list '(a b c d e))]
                              #:when #t

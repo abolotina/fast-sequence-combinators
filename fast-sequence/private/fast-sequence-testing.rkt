@@ -6,21 +6,52 @@
                      syntax/srcloc
                      syntax/unsafe/for-transform)
          rackunit
-         "fast-sequence-filter.rkt"
-         "fast-sequence-map.rkt"
-         "do-sequence.rkt")
+         fast-sequence
+         (submod fast-sequence private-for-testing))
 
 (provide exp-for-clause
+         in-merge
          test-once
          check-fast-seq-combinators
          test-do/seq
-         (all-from-out "fast-sequence-filter.rkt")
-         (all-from-out "fast-sequence-map.rkt")
-         (all-from-out "do-sequence.rkt"))
+         (all-from-out fast-sequence)
+         ;; all from private
+         do/sequence2
+         in-nullary-relation
+         (for-syntax bind-clause
+                     when-clause
+                     when-chunk
+                     bind-chunk
+                     expanded-clause-record
+                     nest
+                     merge
+                     fast-sequence-filter-transformer))
 
 (define-syntax (exp-for-clause stx)
   (syntax-case stx ()
     [(_ e) #`('#,(expand-for-clause (syntax 'here) (syntax e)))]))
+
+;; Elements of all seq-expr's must be single-valued. Behaves like in-parallel.
+(define-sequence-syntax in-merge
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ seq-expr:expr ...)]
+       #:with (b-clause:bind-clause ...) #'([(id) seq-expr] ...)
+       #:with (ecr:expanded-clause-record ...) #'(b-clause.expanded ...)
+       #:with mecr:expanded-clause-record (merge #'(ecr ...))
+       (for-clause-syntax-protect
+        #'[(id ...)
+           (:do-in
+            ([(mecr.outer-id ...) mecr.outer-rhs] ...)
+            mecr.outer-check
+            ([mecr.loop-id mecr.loop-expr] ...)
+            mecr.pos-guard
+            ([(mecr.inner-id ...) mecr.inner-rhs] ...)
+            mecr.pre-guard
+            mecr.post-guard
+            (mecr.loop-arg ...))])])))
 
 (begin-for-syntax
   ;; ct-seen-table : Hash[SExpr => Boolean]

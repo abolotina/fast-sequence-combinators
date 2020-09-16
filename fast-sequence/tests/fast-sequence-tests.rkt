@@ -1,6 +1,6 @@
 #lang racket
 
-(require "fast-sequence-testing.rkt")
+(require "../private/fast-sequence-testing.rkt")
 
 (define (counter)
   (define n 0)

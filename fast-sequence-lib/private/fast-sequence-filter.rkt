@@ -3,8 +3,10 @@
 (require (for-syntax racket/syntax
                      syntax/unsafe/for-transform))
 
-(provide (for-syntax fast-sequence-filter-transformer)
-         fast-sequence-filter)
+(provide fast-sequence-filter)
+
+(module+ private-for-testing
+  (provide (for-syntax fast-sequence-filter-transformer)))
 
 ;; Type    ::= Built-in
 ;;           | Type* -> Type

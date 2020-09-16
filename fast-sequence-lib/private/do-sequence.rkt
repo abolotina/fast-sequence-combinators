@@ -6,16 +6,18 @@
                      syntax/stx
                      syntax/unsafe/for-transform))
 
-(provide do/sequence
-         do/sequence2
-         in-nullary-relation
-         in-merge
-         (for-syntax bind-clause
-                     when-clause
-                     when-chunk
-                     bind-chunk
-                     expanded-clause-record
-                     nest))
+(provide do/sequence)
+
+(module+ private-for-testing
+  (provide do/sequence2
+           in-nullary-relation
+           (for-syntax bind-clause
+                       when-clause
+                       when-chunk
+                       bind-chunk
+                       expanded-clause-record
+                       nest
+                       merge)))
 
 ;; A helper sequence that contains/represents information
 ;; about a number of iterations: 1 or 0.
@@ -109,28 +111,6 @@
           (and ecr.post-guard ...)
           ;; loop args
           (ecr.loop-arg ... ...))])))
-
-;; Elements of all seq-expr's must be single-valued. Behaves like in-parallel.
-(define-sequence-syntax in-merge
-  (lambda (stx)
-    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-  (lambda (stx)
-    (syntax-parse stx
-      [[(id:id ...) (_ seq-expr:expr ...)]
-       #:with (b-clause:bind-clause ...) #'([(id) seq-expr] ...)
-       #:with (ecr:expanded-clause-record ...) #'(b-clause.expanded ...)
-       #:with mecr:expanded-clause-record (merge #'(ecr ...))
-       (for-clause-syntax-protect
-        #'[(id ...)
-           (:do-in
-            ([(mecr.outer-id ...) mecr.outer-rhs] ...)
-            mecr.outer-check
-            ([mecr.loop-id mecr.loop-expr] ...)
-            mecr.pos-guard
-            ([(mecr.inner-id ...) mecr.inner-rhs] ...)
-            mecr.pre-guard
-            mecr.post-guard
-            (mecr.loop-arg ...))])])))
 
 (begin-for-syntax
   ;; nest : Syntax[((Id ...) ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
@@ -260,7 +240,7 @@
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-parse stx
-      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)] #:cut
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
        ;; b-clause : BindingClause[G][{b-clause.id ...}]
        ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
        #:attr mark-as-variables (make-mark-as-variables

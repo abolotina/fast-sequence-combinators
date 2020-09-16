@@ -2,7 +2,7 @@
 @(require racket/sandbox
           scribble/example
           (for-label racket
-                     "main.rkt"))
+                     fast-sequence))
 @(define ref-src
    '(lib "scribblings/reference/reference.scrbl"))
 
@@ -10,7 +10,7 @@
    (parameterize ([sandbox-output 'string]
                   [sandbox-error-output 'string])
      (make-evaluator 'racket
-                     #:requires '("main.rkt"))))
+                     #:requires '(fast-sequence))))
 
 @title{Fast Sequence}
 

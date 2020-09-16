@@ -1,8 +1,6 @@
 #lang racket
 
-(require "do-sequence.rkt"
-         "fast-sequence-filter.rkt"
-         "fast-sequence-map.rkt"
+(require "../private/fast-sequence-testing.rkt"
          racket/match
          rackunit)
 
