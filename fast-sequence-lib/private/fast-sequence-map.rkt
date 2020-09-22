@@ -25,7 +25,8 @@
               post-guard
               (loop-arg ...)) ...)
             ;; ==>
-            (with-syntax ([(false* ...) (build-list
+            (with-syntax ([(ok) (generate-temporaries #'(ok))]
+                          [(false* ...) (build-list
                                          (length (syntax->list #'(inner-id ... ... ... id ...)))
                                          (lambda (x) #'#f))])
               (for-clause-syntax-protect

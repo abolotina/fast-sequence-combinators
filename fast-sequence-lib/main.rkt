@@ -15,8 +15,6 @@
            in-nullary-relation
            (for-syntax bind-clause
                        when-clause
-                       when-chunk
-                       bind-chunk
                        expanded-clause-record
                        nest
                        merge

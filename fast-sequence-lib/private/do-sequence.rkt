@@ -13,8 +13,6 @@
            in-nullary-relation
            (for-syntax bind-clause
                        when-clause
-                       when-chunk
-                       bind-chunk
                        expanded-clause-record
                        nest
                        merge)))
@@ -61,23 +59,19 @@
              #:with (id1 ...) #'(id)
              #:attr expanded (delay (expand-for-clause (current-syntax-context) #'[(id) seq]))))
 
-  ;; A chunk of binding clauses
-  (define-splicing-syntax-class bind-chunk
-    (pattern (~seq b:bind-clause ...+)
-             #:with (id ...) #'(b.id1 ... ...)
-             #:attr expanded (attribute b.expanded)))
-
   ;; A when-clause.
   ;;
   ;; when-clause =
   ;;   | #:when when-guard
   (define-splicing-syntax-class when-clause
-    (pattern (~seq #:when guard-expr:expr)))
+    (pattern (~seq #:when condition:expr)
+                   #:with bc #'[() (in-nullary-relation condition)]))
 
-  ;; A chunk of when-clauses.
-  (define-splicing-syntax-class when-chunk
-    (pattern (~seq w:when-clause ...+)
-             #:with expr #'(and w.guard-expr ...))))
+  ;; A chunk of do/sequence clauses.
+  (define-splicing-syntax-class chunk #:attributes ([b 1]) ;; each b is a BindingClause
+    (pattern (~seq b:bind-clause ...+ ~!))
+    (pattern (~seq w:when-clause ...+ ~!)
+             #:with (b ...) #'(w.bc ...))))
 
 (begin-for-syntax
   ;; Listof^0 X = X
@@ -233,13 +227,54 @@
     ;; the global env contains
     ;; mapping { (x-symbol, x-scope U {intdef-scope}) => Variable, ...}
     (lambda (stx)
-      (internal-definition-context-introduce intdef stx 'add))))
+      (internal-definition-context-introduce intdef stx 'add)))
+
+(define-syntax-class in-body-expr
+  #:literals (in-body)
+  (pattern (in-body body:expr ...+))))
+
+(define-for-syntax (do/sequence2-optimize-body stx)
+  (syntax-parse stx
+    #:literals (do/sequence2)
+    [[(id:id ...) (do/sequence2 (b-clause:bind-clause ...+) ib:in-body-expr)]
+     #:attr mark-as-variables (make-mark-as-variables
+                               (syntax->list #'(b-clause.id1 ... ...)))
+     #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
+                                               #`[#,((attribute mark-as-variables) ids) #,seq-expr])
+                                             (syntax->list #'((b-clause.id1 ...) ...))
+                                             (syntax->list #'(b-clause.seq ...)))
+     #:with ecr:expanded-clause-record (merge #'(b-clause*.expanded ...))
+     #:with ib*:in-body-expr ((attribute mark-as-variables) #'ib)
+     (with-syntax ([(ok) (generate-temporaries #'(ok))]
+                   [(id* ...) (generate-temporaries #'(id ...))]
+                   [(false* ...) (build-list
+                                  (length (syntax->list #'(ecr.inner-id ... ... id ...)))
+                                  (lambda (x) #'#f))])
+       #'[(id ...)
+          (:do-in
+           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+           ecr.outer-check
+           ([ecr.loop-id ecr.loop-expr] ...)
+           ecr.pos-guard
+           ([(ecr.inner-id ... ... id ... ok)
+             (let-values ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+               (cond
+                 [ecr.pre-guard
+                  (let-values ([(id* ...) (begin ib*.body ...)])
+                    (values ecr.inner-id ... ... id* ... #t))]
+                 [else
+                  (values false* ... #f)]))])
+           ok
+           ecr.post-guard
+           (ecr.loop-arg ...))])]))
 
 (define-sequence-syntax do/sequence2
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-parse stx
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
+       (do/sequence2-optimize-body stx)]
       [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
        ;; b-clause : BindingClause[G][{b-clause.id ...}]
        ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
@@ -268,18 +303,35 @@
            (ecr.loop-arg ...))]]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
+(define-sequence-syntax in-body
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      [[(id:id ...) (_ body:expr ...+)]
+       (for-clause-syntax-protect
+        #'[(id ...) (:do-in ([(id ...) (begin body ...)]) #t () #t () #t #f ())])]
+      [_ #f])))
+
+(define-for-syntax (optimize stx)
+  (syntax-parse stx
+    #:literals (in-nullary-relation)
+    [(_ ([() (in-nullary-relation #t)] ...+) seq-expr:expr)
+     #'seq-expr]
+    [(_ (b-clause:bind-clause ...+) (_ ([() (in-nullary-relation #t)] ...+) ib:in-body-expr))
+     #'(do/sequence2 (b-clause ...) ib)]
+    [(_ (b-clause:bind-clause ...+) seq-expr:expr)
+     #`(do/sequence2 (b-clause ...) #,(optimize #'seq-expr))]
+    [_ stx]))
+
 (define-sequence-syntax do/sequence
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-parse stx
-      [[(id:id ...) (_ () body:expr ...+)]
+      [[(id:id ...) (_ (c:chunk ...) body:expr ...+)]
        (for-clause-syntax-protect
-        #'[(id ...) (:do-in ([(id ...) (begin body ...)]) #t () #t () #t #f ())])]
-      [[(id:id ...) (_ (w:when-chunk . rest) body:expr ...+)]
-       (for-clause-syntax-protect
-        #'[(id ...) (do/sequence2 ([() (in-nullary-relation w.expr)]) (do/sequence rest body ...))])]
-      [[(id:id ...) (_ (b:bind-chunk . rest) body:expr ...+)]
-       (for-clause-syntax-protect
-        #'[(id ...) (do/sequence2 (b.b ...) (do/sequence rest body ...))])]
+        #`[(id ...) #,(optimize (foldr (lambda (chunk acc) #`(do/sequence2 #,chunk #,acc))
+                                       #'(in-body body ...)
+                                       (syntax->list #'((c.b ...) ...))))])]
       [_ #f])))
