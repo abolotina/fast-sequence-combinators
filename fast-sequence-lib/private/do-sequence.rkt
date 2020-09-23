@@ -275,6 +275,28 @@
     (syntax-parse stx
       [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
        (do/sequence2-optimize-body stx)]
+      [[(id:id ...) (_ ([() (in-nullary-relation cond:expr)] ...+) seq-expr:expr)]
+       #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
+       (with-syntax ([(false* ...) (build-list
+                                    (length (syntax->list #'(ecr.outer-id ... ...)))
+                                    (lambda (x) #'#f))]
+                     [(cond-val) (generate-temporaries #'(cond-val))])
+         #'[(id ...)
+            (:do-in
+             ([(ecr.outer-id ... ... cond-val)
+               (let ([cond-val (and cond ...)])
+                 (if cond-val
+                     (let-values ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+                       (values ecr.outer-id ... ... #t))
+                     (values false* ... #f)))])
+             (and cond-val ecr.outer-check)
+             ([ecr.loop-id (and cond-val ecr.loop-expr)] ...)
+             (and cond-val ecr.pos-guard)
+             ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+             ecr.pre-guard
+             ecr.post-guard
+             (ecr.loop-arg ...))])]
+      ;; general case
       [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
        ;; b-clause : BindingClause[G][{b-clause.id ...}]
        ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
@@ -313,15 +335,17 @@
         #'[(id ...) (:do-in ([(id ...) (begin body ...)]) #t () #t () #t #f ())])]
       [_ #f])))
 
-(define-for-syntax (optimize stx)
+(define-for-syntax (optimize-when stx)
+  (define-syntax-class true-literal
+    (pattern (~and #t t) #:when (free-identifier=? #'#%datum (datum->syntax #'t '#%datum))))
   (syntax-parse stx
-    #:literals (in-nullary-relation)
-    [(_ ([() (in-nullary-relation #t)] ...+) seq-expr:expr)
-     #'seq-expr]
-    [(_ (b-clause:bind-clause ...+) (_ ([() (in-nullary-relation #t)] ...+) ib:in-body-expr))
+    #:literals (do/sequence2 in-nullary-relation)
+    [(do/sequence2 ([() (in-nullary-relation _:true-literal)] ...+) seq-expr:expr)
+     (optimize-when #'seq-expr)]
+    [(do/sequence2 (b-clause:bind-clause ...+) (do/sequence2 ([() (in-nullary-relation _:true-literal)] ...+) ib:in-body-expr))
      #'(do/sequence2 (b-clause ...) ib)]
-    [(_ (b-clause:bind-clause ...+) seq-expr:expr)
-     #`(do/sequence2 (b-clause ...) #,(optimize #'seq-expr))]
+    [(do/sequence2 (b-clause:bind-clause ...+) seq-expr:expr)
+     #`(do/sequence2 (b-clause ...) #,(optimize-when #'seq-expr))]
     [_ stx]))
 
 (define-sequence-syntax do/sequence
@@ -329,9 +353,9 @@
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-parse stx
+      #:context 'do/sequence
       [[(id:id ...) (_ (c:chunk ...) body:expr ...+)]
        (for-clause-syntax-protect
-        #`[(id ...) #,(optimize (foldr (lambda (chunk acc) #`(do/sequence2 #,chunk #,acc))
-                                       #'(in-body body ...)
-                                       (syntax->list #'((c.b ...) ...))))])]
-      [_ #f])))
+        #`[(id ...) #,(optimize-when (foldr (lambda (chunk acc) #`(do/sequence2 #,chunk #,acc))
+                                            #'(in-body body ...)
+                                            (syntax->list #'((c.b ...) ...))))])])))

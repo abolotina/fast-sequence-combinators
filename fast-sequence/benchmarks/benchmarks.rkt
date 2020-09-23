@@ -72,6 +72,39 @@
                   [(z) (in-list x)])
          z))
 
+(time* "nesting /w dynamic sequence v.1.1"
+       (for/list ([(x) (in-concat-sequences1
+                        (sequence-map (lambda (x)
+                                        (sequence-map (lambda (z) z) x))
+                                      '((1 2 3) (4 5))))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
+(time* "nesting /w dynamic sequence v.2.1"
+       (for/list ([(x) (in-concat-sequences2
+                        (sequence-map (lambda (x)
+                                        (sequence-map (lambda (z) z) x))
+                                      '((1 2 3) (4 5))))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
+(time* "nesting /w dynamic sequence v.3.1"
+       (for/list ([(x) (in-concat-sequences
+                        (sequence-map (lambda (x)
+                                        (sequence-map (lambda (z) z) x))
+                                      '((1 2 3) (4 5))))])
+         x)
+       (for/list ([(x) (in-list '((1 2 3) (4 5)))]
+                  #:when #t
+                  [(z) (in-list x)])
+         z))
+
 (time* "nesting /w :do-in"
  (for/list ([x (:do-in ([(outer-seq) '((1 2 3) (4 5))])
                         (list? outer-seq)
@@ -163,6 +196,21 @@
  (for/list ([(x) (in-list '((1 2 3) (4 5)))]
             #:when #t
             [(z) (in-list x)])
+   z))
+
+(time* "deep nesting /w do/sequence"
+ (for/list ([x (do/sequence ([(x) (in-list '(((1 2 3)) ((4 5) (1 2))))]
+                             #:when #t
+                             [(y) (in-list x)]
+                             #:when #t
+                             [(z) (in-list y)])
+                 z)])
+   x)
+ (for/list ([(x) (in-list '(((1 2 3)) ((4 5) (1 2))))]
+            #:when #t
+            [(y) (in-list x)]
+            #:when #t
+            [(z) (in-list y)])
    z))
 
 (time* "merge + nesting"
