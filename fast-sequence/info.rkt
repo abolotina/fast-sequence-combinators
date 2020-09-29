@@ -18,4 +18,4 @@
 ;; collect info
 
 (define name "fast-sequence")
-(define scribblings '(["manual.scrbl" ()]))
+(define scribblings '(["fast-sequence.scrbl" ()]))

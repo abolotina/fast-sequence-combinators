@@ -16,8 +16,8 @@
          test-do/seq
          (all-from-out fast-sequence)
          ;; all from private
-         do/sequence2
-         in-nullary-relation
+         in-nested
+         in-when
          (for-syntax bind-clause
                      when-clause
                      expanded-clause-record

@@ -149,7 +149,7 @@
  (define x 1)
  (define y 2)
  (for/list ([z (do/sequence ([x (in-list (list (list x y)))]
-                             [() (in-nullary-relation (odd? x))])
+                             [() (in-when (odd? x))])
                  x)])
     z)
 

@@ -49,8 +49,7 @@
           ;; ==>
           (with-syntax* ([estx expanded-for-clause]
                          [(loop-id* ...) (generate-temporaries #'(loop-id ...))]
-                         [(loop-arg-id ...) (generate-temporaries #'(loop-arg ...))]
-                         [(loop-arg* ...) #'(((loop-arg-id loop-id ...) inner-id ... ...) ...)]
+                         [(loop-arg* ...) (generate-temporaries #'(loop-arg ...))]
                          [(false* ...) (build-list
                                        (length (syntax->list #'(inner-id ... ... loop-arg* ...)))
                                        (lambda (x) #'#f))])
@@ -67,17 +66,17 @@
                  #t
                  ;; inner bindings
                  ([(inner-id ... ... loop-id* ... ok)
-                   (let ([loop-arg-id (lambda (loop-id ...) (lambda (inner-id ... ...) loop-arg))] ...)
-                     (let loop ([loop-id loop-id] ...)
-                       (if pos-guard
-                           (let-values ([(inner-id ...) inner-rhs] ...)
+                   (let loop ([loop-id loop-id] ...)
+                     (if pos-guard
+                         (let-values ([(inner-id ...) inner-rhs] ...)
+                           (let ([loop-arg* loop-arg] ...)
                              (if (and pre-guard
                                       post-guard)
                                  (if (f id ...)
                                      (values inner-id ... ... loop-arg* ... #t)
                                      (loop loop-arg* ...))
-                                 (values false* ... #f)))
-                           (values false* ... #f))))])
+                                 (values false* ... #f))))
+                         (values false* ... #f)))])
                  ;; pre guard
                  ok
                  ;; post guard

@@ -106,7 +106,7 @@
   (let*-values ([(b1 w1) (bind-when sw1 '(x y))]
                 [(b2) `[z ,(car sw2)]]
                 [(s2) (car sw2)]
-                [(do/seq) `(for/list ([x (do/sequence2 (,b1) ,s2)])
+                [(do/seq) `(for/list ([x (in-nested (,b1) ,s2)])
                              x)])
     `(begin
        (display ,(begin (fprintf o "b1: ~a\n s2: ~a\n" b1 s2)

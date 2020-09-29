@@ -1,16 +1,18 @@
-#lang racket
+#lang racket/base
 
 (require (for-syntax racket/syntax
-                     racket
+                     racket/base
+                     racket/promise
                      syntax/parse
                      syntax/stx
-                     syntax/unsafe/for-transform))
+                     syntax/unsafe/for-transform)
+         "fast-sequence-filter.rkt")
 
 (provide do/sequence)
 
 (module+ private-for-testing
-  (provide do/sequence2
-           in-nullary-relation
+  (provide in-nested
+           in-when
            (for-syntax bind-clause
                        when-clause
                        expanded-clause-record
@@ -20,9 +22,9 @@
 ;; A helper sequence that contains/represents information
 ;; about a number of iterations: 1 or 0.
 ;;
-;;   (in-nullary-relation #t) = [(values)]
-;;   (in-nullary-relation #f) = []
-(define-sequence-syntax in-nullary-relation
+;;   (in-when #t) = [(values)]
+;;   (in-when #f) = []
+(define-sequence-syntax in-when
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
@@ -65,7 +67,7 @@
   ;;   | #:when when-guard
   (define-splicing-syntax-class when-clause
     (pattern (~seq #:when condition:expr)
-                   #:with bc #'[() (in-nullary-relation condition)]))
+                   #:with bc #'[() (in-when condition)]))
 
   ;; A chunk of do/sequence clauses.
   (define-splicing-syntax-class chunk #:attributes ([b 1]) ;; each b is a BindingClause
@@ -112,6 +114,7 @@
     (syntax-parse stx
       [((id:id ...)
         eb:expanded-clause-record
+        when-cond:expr
         eb-i:expanded-clause-record)
        (with-syntax ([(post-guard* i-post-guard* inner-is-initialized? ok)
                       (generate-temporaries #'(post-guard* i-post-guard* inner-is-initialized? ok))]
@@ -176,13 +179,15 @@
                         (if (and eb.pre-guard
                                  post-guard*)
                             ;; Case 2
-                            (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...
-                                         [(loop-arg*) (lambda () eb.loop-arg)] ...
-                                         [(inner-id*) eb.inner-id] ... ...)
-                              eb-i.outer-check
-                              (loop-with-inner (loop-arg*) ... inner-id* ... ...
-                                               eb-i.outer-id ... ... eb-i.loop-expr ...
-                                               eb.post-guard #t))
+                            (if when-cond
+                                (let-values ([(eb-i.outer-id ...) eb-i.outer-rhs] ...
+                                             [(loop-arg*) (lambda () eb.loop-arg)] ...
+                                             [(inner-id*) eb.inner-id] ... ...)
+                                  eb-i.outer-check
+                                  (loop-with-inner (loop-arg*) ... inner-id* ... ...
+                                                   eb-i.outer-id ... ... eb-i.loop-expr ...
+                                                   eb.post-guard #t))
+                                (loop-without-inner eb.loop-arg ... eb.post-guard))
                             (outer-is-done)))]
                      [else
                       (outer-is-done)]))
@@ -233,10 +238,10 @@
   #:literals (in-body)
   (pattern (in-body body:expr ...+))))
 
-(define-for-syntax (do/sequence2-optimize-body stx)
+(define-for-syntax (in-nested-optimize-body stx)
   (syntax-parse stx
-    #:literals (do/sequence2)
-    [[(id:id ...) (do/sequence2 (b-clause:bind-clause ...+) ib:in-body-expr)]
+    #:literals (in-nested)
+    [[(id:id ...) (in-nested (b-clause:bind-clause ...+) ib:in-body-expr)]
      #:attr mark-as-variables (make-mark-as-variables
                                (syntax->list #'(b-clause.id1 ... ...)))
      #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
@@ -268,14 +273,56 @@
            ecr.post-guard
            (ecr.loop-arg ...))])]))
 
-(define-sequence-syntax do/sequence2
+(define-for-syntax (in-nested* stx cond-stx)
+  (syntax-parse stx
+    #:literals (in-nested)
+    [[(id:id ...) (in-nested (b-clause:bind-clause ...+) seq-expr:expr)]
+     ;; b-clause : BindingClause[G][{b-clause.id ...}]
+     ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
+     #:attr mark-as-variables (make-mark-as-variables
+                               (syntax->list #'(b-clause.id1 ... ...)))
+     ;; mark-as-variables :
+     ;; ∃(xs') (Syntax[Expr[G/{b-clause.id ...}]]
+     ;;                  -> Syntax[Expr[G/xs']])
+     #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
+                                               #`[#,((attribute mark-as-variables) ids) #,seq-expr])
+                                             (syntax->list #'((b-clause.id1 ...) ...))
+                                             (syntax->list #'(b-clause.seq ...)))
+     #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
+     #:with eb-i:expanded-clause-record
+     (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
+     #:with ecr:expanded-clause-record
+            (nest #`((id ...) eb #,((attribute mark-as-variables) cond-stx) eb-i))
+     #'[(id ...)
+        (:do-in
+         ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+         ecr.outer-check
+         ([ecr.loop-id ecr.loop-expr] ...)
+         ecr.pos-guard
+         ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+         ecr.pre-guard
+         ecr.post-guard
+         (ecr.loop-arg ...))]]))
+
+(define-sequence-syntax in-nested
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
   (lambda (stx)
     (syntax-parse stx
+      #:literals (in-nested in-when)
       [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
-       (do/sequence2-optimize-body stx)]
-      [[(id:id ...) (_ ([() (in-nullary-relation cond:expr)] ...+) seq-expr:expr)]
+       (in-nested-optimize-body stx)]
+      #;[[(id:id ...) (_ (b-clause:bind-clause ...+)
+                       (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
+       #'[(id ...)
+          (in-nested ([(b-clause.id1 ... ...) (fast-sequence-filter
+                                               (lambda (b-clause.id1 ... ...) (and cond ...))
+                                               (do/sequence (b-clause ...) (values b-clause.id1 ... ...)))])
+                     seq-expr)]]
+      [[(id:id ...) (_ (b-clause:bind-clause ...+)
+                       (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
+       (in-nested* #'[(id ...) (in-nested (b-clause ...) seq-expr)] #'(and cond ...))]
+      #;[[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
        #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        (with-syntax ([(false* ...) (build-list
                                     (length (syntax->list #'(ecr.outer-id ... ...)))
@@ -298,31 +345,7 @@
              (ecr.loop-arg ...))])]
       ;; general case
       [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
-       ;; b-clause : BindingClause[G][{b-clause.id ...}]
-       ;; seq-expr : Expr[G/{b-clause.id ...}][...]       
-       #:attr mark-as-variables (make-mark-as-variables
-                                 (syntax->list #'(b-clause.id1 ... ...)))
-       ;; mark-as-variables :
-       ;; ∃(xs') (Syntax[Expr[G/{b-clause.id ...}]]
-       ;;                  -> Syntax[Expr[G/xs']])
-       #:with (b-clause*:bind-clause ...) (map (lambda (ids seq-expr)
-                                                 #`[#,((attribute mark-as-variables) ids) #,seq-expr])
-                                               (syntax->list #'((b-clause.id1 ...) ...))
-                                               (syntax->list #'(b-clause.seq ...)))
-       #:with eb:expanded-clause-record (merge #'(b-clause*.expanded ...))
-       #:with eb-i:expanded-clause-record
-              (expand-for-clause stx #`[(id ...) #,((attribute mark-as-variables) #'seq-expr)])
-       #:with ecr:expanded-clause-record (nest #'((id ...) eb eb-i))
-       #'[(id ...)
-          (:do-in
-           ([(ecr.outer-id ...) ecr.outer-rhs] ...)
-           ecr.outer-check
-           ([ecr.loop-id ecr.loop-expr] ...)
-           ecr.pos-guard
-           ([(ecr.inner-id ...) ecr.inner-rhs] ...)
-           ecr.pre-guard
-           ecr.post-guard
-           (ecr.loop-arg ...))]]
+       (in-nested* stx #'#t)]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
 (define-sequence-syntax in-body
@@ -339,14 +362,21 @@
   (define-syntax-class true-literal
     (pattern (~and #t t) #:when (free-identifier=? #'#%datum (datum->syntax #'t '#%datum))))
   (syntax-parse stx
-    #:literals (do/sequence2 in-nullary-relation)
-    [(do/sequence2 ([() (in-nullary-relation _:true-literal)] ...+) seq-expr:expr)
+    #:literals (in-nested in-when)
+    [(in-nested ([() (in-when _:true-literal)] ...+) seq-expr:expr)
      (optimize-when #'seq-expr)]
-    [(do/sequence2 (b-clause:bind-clause ...+) (do/sequence2 ([() (in-nullary-relation _:true-literal)] ...+) ib:in-body-expr))
-     #'(do/sequence2 (b-clause ...) ib)]
-    [(do/sequence2 (b-clause:bind-clause ...+) seq-expr:expr)
-     #`(do/sequence2 (b-clause ...) #,(optimize-when #'seq-expr))]
+    [(in-nested (b-clause:bind-clause ...+) (in-nested ([() (in-when _:true-literal)] ...+) ib:in-body-expr))
+     #'(in-nested (b-clause ...) ib)]
+    [(in-nested (b-clause:bind-clause ...+) seq-expr:expr)
+     #`(in-nested (b-clause ...) #,(optimize-when #'seq-expr))]
     [_ stx]))
+
+;; TODO:
+;; - type annotations and an explanation of types
+;; - update the documentation
+;; - racket -> racket/base
+;; Alt + Q
+;; set-fill-column
 
 (define-sequence-syntax do/sequence
   (lambda (stx)
@@ -356,6 +386,6 @@
       #:context 'do/sequence
       [[(id:id ...) (_ (c:chunk ...) body:expr ...+)]
        (for-clause-syntax-protect
-        #`[(id ...) #,(optimize-when (foldr (lambda (chunk acc) #`(do/sequence2 #,chunk #,acc))
+        #`[(id ...) #,(optimize-when (foldr (lambda (chunk acc) #`(in-nested #,chunk #,acc))
                                             #'(in-body body ...)
                                             (syntax->list #'((c.b ...) ...))))])])))

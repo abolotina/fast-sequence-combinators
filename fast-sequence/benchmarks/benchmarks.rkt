@@ -35,7 +35,7 @@
    (list x y)))
 
 (time* "nesting /w do-sequence2"
- (for/list ([x (do/sequence2 ([(x) (in-list '((1 2 3) (4 5)))])
+ (for/list ([x (in-nested ([(x) (in-list '((1 2 3) (4 5)))])
                               (do/sequence ([(y) (in-list x)]) y))])
    x)
  (for/list ([(x) (in-list '((1 2 3) (4 5)))]
