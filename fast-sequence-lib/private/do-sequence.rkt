@@ -373,10 +373,7 @@
 
 ;; TODO:
 ;; - type annotations and an explanation of types
-;; - update the documentation
 ;; - racket -> racket/base
-;; Alt + Q
-;; set-fill-column
 
 (define-sequence-syntax do/sequence
   (lambda (stx)

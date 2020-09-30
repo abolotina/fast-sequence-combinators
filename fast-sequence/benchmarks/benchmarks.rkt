@@ -1,6 +1,7 @@
-#lang racket
+#lang racket/base
 
-(require fast-sequence
+(require racket/sequence
+         fast-sequence
          (submod fast-sequence private-for-testing)
          "../private/fast-sequence-testing.rkt"
          "nest.rkt")

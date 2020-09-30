@@ -1,7 +1,8 @@
-#lang racket
+#lang racket/base
 
 (require (for-syntax racket/syntax
-                     syntax/unsafe/for-transform))
+                     syntax/unsafe/for-transform
+                     racket/base))
 
 (provide fast-sequence-filter)
 

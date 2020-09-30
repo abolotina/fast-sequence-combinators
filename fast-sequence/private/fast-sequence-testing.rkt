@@ -1,10 +1,11 @@
-#lang racket
+#lang racket/base
 
 (require (for-syntax racket/syntax
                      racket
                      syntax/parse
                      syntax/srcloc
                      syntax/unsafe/for-transform)
+         racket/sequence
          rackunit
          fast-sequence
          (submod fast-sequence private-for-testing))

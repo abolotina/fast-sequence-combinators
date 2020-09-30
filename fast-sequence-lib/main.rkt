@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 (require "private/do-sequence.rkt"
          "private/fast-sequence-map.rkt"

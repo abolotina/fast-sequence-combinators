@@ -1,8 +1,9 @@
-#lang racket
+#lang racket/base
 
 (require "../private/fast-sequence-testing.rkt"
          racket/match
-         rackunit)
+         rackunit
+         racket/list)
 
 (define (counter)
   (define n 0)
