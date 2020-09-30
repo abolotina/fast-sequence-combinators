@@ -24,7 +24,7 @@ used inside a @racket[for] clause.
 The operations provided by this library have high performance when applied to a @italic{fast sequence}.
 A fast sequence uses syntactic information about the shape of a sequence to apply
 compiler optimizations, such as inlining and using specialized functions for extracting data. Examples of
-fast sequences are applications of a sequence constructor, such as @racket[in-range], @racket[in-list], etc.
+fast sequences are applications of a sequence macro, such as @racket[in-range], @racket[in-list], etc.
 (see @secref[#:doc ref-src]{sequences}).
 
 For a way of defining new fast sequences, see @racket[define-sequence-syntax].
@@ -92,7 +92,7 @@ and we can no longer define a reusable sequence.
 Using fast sequence operations provided by this library, we can take the best of these two worlds:
 
 @examples[#:eval my-evaluator #:label #f
-(define-syntax-rule (squares-of-evens-up-to-10000)
+(define-sequence-rule (squares-of-evens-up-to-10000)
   (fast-sequence-map
    sqr
    (fast-sequence-filter
@@ -102,8 +102,9 @@ Using fast sequence operations provided by this library, we can take the best of
 
 In this code, @racket[fast-sequence-filter] and @racket[fast-sequence-map] may be considered as versions of @racket[sequence-filter] and
 @racket[sequence-map] that, being applied to a specialized sequence, still run fast. Note that as like as specialized sequences,
-their applications are efficient only when applied in a clause of a @racket[for] loop or its variants, so the macro definition is
-necessary for this solution.
+their applications are efficient only when applied in a clause of a @racket[for] loop or its variants, so it is
+necessary to define a fast sequence form instead of merely using @racket[define]. The @racket[define-sequence-rule] from is similar to
+@racket[define-syntax-rule], but it defines a sequence macro, which can be efficiently used in a @racket[for] loop clause.
 
 @section{Fast Sequence Operations}
 
@@ -206,4 +207,21 @@ The @racket[do/sequence] form provides the best performance when it is used dire
                               #:when (even? y))
                      y)])
             (printf "~a ~a\n" x y))]
+}
+
+@section{Defining New Sequence Forms}
+
+@defform[(define-sequence-rule (id . pattern) template)
+         #:contracts ([template sequence?])]{
+The @racket[define-sequence-rule] form binds @racket[id] as a sequence macro that matches a single pattern.
+Using @racket[(id . pattern)] is only allowed directly in a clause of a @racket[for] loop (or its variants).
+A @racket[template] must be a sequence expression. It provides better performance when @racket[template] is
+a fast sequence expression.
+
+@examples[#:eval my-evaluator
+          (define-sequence-rule (in-hash-set vec-of-lsts)
+            (do/sequence ([(x) (in-vector vec-of-lsts)]
+                          #:when #t
+                          [(y) (in-list x)])
+              y))]
 }
