@@ -87,7 +87,8 @@
       [(zero? n) (car (generate-temporaries xs))]
       [(= n 1) (generate-temporaries xs)]
       [else (map (lambda (x) (gen-temp-tree (sub1 n) x)) (stx->list xs))]))
-  
+
+  ;; merge : Syntax[(ECR[G][{x:t ...}] ...)] -> Syntax[ECR[G][{x:t ... ...}]]
   (define (merge stx)
     (syntax-parse stx
       [(ecr:expanded-clause-record ...)
@@ -109,7 +110,8 @@
           (ecr.loop-arg ... ...))])))
 
 (begin-for-syntax
-  ;; nest : Syntax[((Id ...) ExpandedClauseRecord ExpandedClauseRecord)] -> Syntax[ExpandedClauseRecord]
+  ;; nest : Syntax[((id:Id ...) ECR[G][{x ...}] Expr[G/x...][Any] ECR[G/x...][{id ...}])]
+  ;;     -> Syntax[ECR[G][{id ...}]]
   (define (nest stx)
     (syntax-parse stx
       [((id:id ...)
@@ -304,6 +306,7 @@
          ecr.post-guard
          (ecr.loop-arg ...))]]))
 
+;; in-nested : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
 (define-sequence-syntax in-nested
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
@@ -358,6 +361,8 @@
         #'[(id ...) (:do-in ([(id ...) (begin body ...)]) #t () #t () #t #f ())])]
       [_ #f])))
 
+;; optimize-when : Syntax[(in-nested (BindingClause[G][{x:t ...}] ...) Expr[G/x:t...][(sequenceof (values t ...))])]
+;;              -> Syntax[(in-nested (BindingClause[G][{x:t ...}] ...) Expr[G/x:t...][(sequenceof (values t ...))])]
 (define-for-syntax (optimize-when stx)
   (define-syntax-class true-literal
     (pattern (~and #t t) #:when (free-identifier=? #'#%datum (datum->syntax #'t '#%datum))))
@@ -373,7 +378,6 @@
 
 ;; TODO:
 ;; - type annotations and an explanation of types
-;; - racket -> racket/base
 
 (define-sequence-syntax do/sequence
   (lambda (stx)

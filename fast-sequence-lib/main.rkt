@@ -3,7 +3,8 @@
 (require "private/do-sequence.rkt"
          "private/fast-sequence-map.rkt"
          "private/fast-sequence-filter.rkt"
-         (for-syntax syntax/parse))
+         (for-syntax syntax/parse
+                     racket/base))
 
 (provide (all-from-out "private/do-sequence.rkt")
          (all-from-out "private/fast-sequence-map.rkt")
