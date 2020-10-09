@@ -19,6 +19,167 @@
                        nest
                        merge)))
 
+;; -------------------------------------
+;; How to read types
+;; 
+;; We use a combination of types and grammars to describe macros --- in particular, their
+;; binding structure. For example,
+;;
+;; (let ([x 1] [y 2]) (add1 x))
+;;
+;; We could describe this using the following notation:
+;;
+;;   (let ([x 1] [y 2]) (add1 x)) : Expr[G0][Nat]
+;;   where G0 represents the initial environment.
+;;
+;; Within that term, (add1 x) : Expr[G0/x:Nat,y:Nat][Nat].
+;;
+;; Expr is a nonterminal that has parameters. In the example above, it tells
+;; that we can think of the term (let ([x 1] [y 2]) (add1 x)) as an expression
+;; that is evaluated in type environment G0 and has type Nat. (Note that this
+;; representation is not unique: it also can be described as Expr[G0][Real],
+;; Expr[G0][Integer], etc. depending on what we need.)
+;;
+;; Also, (add1 x) in the body of the let macro is evaluated in the extended
+;; environment, where x and y of type Nat are bound later than identifiers from
+;; G0. We say that a type environment consists of *ribs* and G0 and [x:Nat,y:Nat]
+;; are different ribs. Identifiers from newer ribs can shadow identifiers from
+;; older ribs (the newest ribs are the rightmost ones in this notation), and
+;; a rib cannot contain duplicate identifiers.
+;;
+;;
+;; We can generalize from the example above and describe the binding behavior
+;; of the let macro using this notation:
+;;
+;; (let ([id:Id expr:Expr[G][T]] ...) body:Expr[G/id:T...][T']) : Expr[G][T']
+;;
+;; As this example shows, macros can be described by terms of more complex structure
+;; than atomic nonterminals with parameters. We say that macros are described by
+;; syntax patterns. For instance, the terms ([id:Id expr:Expr[G][T]] ...),
+;; Expr[G/id:T...][T'], Expr[G][T'] in this example are syntax patterns.
+;; We allow syntax patterns to contain names, and nonterminals can depend on
+;; those names. For example, in the specification for let, the pattern for the body is
+;; Expr[G/id:T...][T'], which depends on id. So, in the example
+;; (let ([x 1] [y 2]) (add1 x)), the body expression (add1 x) is described
+;; by Expr[G/x:Nat,y:Nat][Nat].
+;;
+;; Syntax patterns are also allowed to contain literal identifiers. For example,
+;;
+;; (let ([x 1]) (add1 x)) : (let ([x:Id 1:Expr[G0][Nat]) (add1 x):Expr[G0/x:Nat][Nat])
+;;   where let is a literal identifier.
+;;
+;; The syntax pattern describing the syntax on the left is more specific than
+;; Expr[G0][Nat]. We can also define a new pattern using the following notation:
+;;
+;; LetExpr[G][T'] ::=
+;;   | (let ([id:Id expr:Expr[G][T]] ...) body:Expr[G/id:T...][T']) : Expr[G][T']
+;;      where let is a literal identifier.
+;;
+;; Then, we can write
+;;
+;; (let ([x 1]) (add1 x)) : LetExpr[G0][Nat]
+;;
+;; Is this notation enough for describing macros? In Racket, macros are defined
+;; as functions that return syntax objects. To type-check those functions, we
+;; need to connect types of Racket expressions and syntax patterns
+;; describing macros.
+;;
+;; We describe Racket expressions using types. For example, 5 : Nat, "hello" : String.
+;; Note that we overload colon to define two different relations: one relating
+;; pieces of syntax and syntax patterns and another one relating Racket expressions
+;; and types.
+;;
+;; To describe syntax objects, we use type Syntax with a parameter. The parameter is
+;; a syntax pattern describing the structure of the syntax object. For example,
+;;
+ (define-syntax let
+   (syntax-parser
+     [(_ ([var:id rhs:expr] ...) body:expr)
+      ;; For example, #'body has type Syntax[Expr[G0/var:T1...][T]].
+      ;; This type depends on var ..., which is a macro pattern corresponding to the
+      ;; syntax pattern marked "id" in the describtion of the let macro above.
+      ;;
+      ;; This macro is correct because body and rhs are put in the right context,
+      ;; that is, body is in the initial scope extended by var ..., and rhs is
+      ;; in the initial scope.
+      #'((lambda (var ...) body) rhs ...)]))
+;;
+;; -------------------------------------
+;; BindingClause and ECR
+;;
+;; Two important syntax pattern that we use are BindingClause and ECR. BindingClause
+;; describes a binding clause that has the same shape and meaning as a binding clause
+;; of a for loop (or its variants) macro. ECR is a representation for fast sequences
+;; in Racket provided by the for loop macro framework.
+;;
+;;   BindingClause[G][G'] -- a binding clause in type environment G
+;;   that produces type environment rib G'.
+;;   BindingClause[G][{x:t, ...}]
+;;     ::= [(x:Id ...) Expr[G][(sequenceof (values t ...))]]
+;;
+;;   ECR[G][G'] -- an expanded clause record in type environment G
+;;   that produces type environment rib G'.
+;;   ECR[G][G']
+;;   ::=
+;;     (;; outer bindings
+;;      ([(outer-id : Id) outer-rhs : Expr[G][O]])
+;;      loop bindings
+;;      ([loop-id : Id loop-expr : Expr[G/outer-id : O][L]])
+;;      pos check
+;;      pos-guard : Expr[G/outer-id : O/loop-id : L][Any]
+;;      inner bindings
+;;      ([inner-id inner-rhs : Expr[G/outer-id : O/loop-id : L][I]] ...)
+;;      pre guard
+;;      pre-guard : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][Any]
+;;      post guard
+;;      post-guard : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][Any]
+;;      loop args
+;;      (loop-arg : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][L]))
+;;    where G' ⊂ { outer-id : O/loop-id : L/inner-id : I, ...}
+;;               and { outer-id : O/loop-id : L/inner-id : I, ...} - dom(G')
+;;               are fresh variables with respect to the for loop body.
+;;
+;; An expand-for-clause function provided by Racket expands a binding clause
+;; that has syntax pattern BindingClause[G][G'] into an expanded clause record
+;; that has syntax pattern ECR[G][G']:
+;; 
+;; expand-for-clause : Syntax BindingClause[G][G'] -> ECR[G][G']
+;;
+;; -------------------------------------
+;;
+;; Decomposition strategy for do/sequence:
+;; - in-nested -- handles nested iteration
+;; - in-when   -- handles when-clauses (generalizes filter)
+;; - in-body   -- handles body (generalizes map)
+;; 
+;; Example:
+;; 
+;; (do/sequence ([x XS]
+;;               #:when COND1
+;;               [y YS]
+;;               [w WS]
+;;               #:when COND2
+;;               [z ZS])
+;;   BODY)
+;; where each when-clause's and the following chunk of binding clause's expressions are
+;; in the scope of all variables bound by binding clauses preceding them
+;; =
+;; (in-nested ([x XS])
+;;  (in-nested ([() (in-when COND1)])     ; from #:when COND1
+;;    (in-nested ([y YS] [w WS])
+;;      (in-nested ([() (in-when COND2)]) ; from #:when COND2
+;;        (in-nested ([z ZS])
+;;          (in-body BODY))))))
+;;
+;; A sequence is represented by the type ECR (Expanded Clause Record) that
+;; contains information about iteration.
+;;
+;; The implementation of in-nested is decomposed to two functnions:
+;; - merge -- merges ECRs of multiple binding clauses into a single ECR.
+;; - nest  -- nests two ECRs. The result is a single ECR.
+;;
+;; -------------------------------------
+
 ;; A helper sequence that contains/represents information
 ;; about a number of iterations: 1 or 0.
 ;;
@@ -236,10 +397,16 @@
     (lambda (stx)
       (internal-definition-context-introduce intdef stx 'add)))
 
-(define-syntax-class in-body-expr
-  #:literals (in-body)
-  (pattern (in-body body:expr ...+))))
+  ;; An in-body expression.
+  ;; in-body-expr =
+  ;;   | (in-body body ...+)
+  (define-syntax-class in-body-expr
+    #:literals (in-body)
+    (pattern (in-body body:expr ...+))))
 
+;; in-nested-optimize-body : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
+;; An optimization for the special case 1:
+;;   (in-nested ([x XS] ...) (in-body BODY))
 (define-for-syntax (in-nested-optimize-body stx)
   (syntax-parse stx
     #:literals (in-nested)
@@ -275,6 +442,7 @@
            ecr.post-guard
            (ecr.loop-arg ...))])]))
 
+;; in-nested* : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
 (define-for-syntax (in-nested* stx cond-stx)
   (syntax-parse stx
     #:literals (in-nested)
@@ -313,8 +481,10 @@
   (lambda (stx)
     (syntax-parse stx
       #:literals (in-nested in-when)
+      ;; Special case 1: (in-nested ([x XS] ...) (in-body BODY))
       [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
        (in-nested-optimize-body stx)]
+      ;; Special case 5 (v.1): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
       #;[[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
        #'[(id ...)
@@ -322,10 +492,12 @@
                                                (lambda (b-clause.id1 ... ...) (and cond ...))
                                                (do/sequence (b-clause ...) (values b-clause.id1 ... ...)))])
                      seq-expr)]]
+      ;; Special case 5 (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
       [[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
        (in-nested* #'[(id ...) (in-nested (b-clause ...) seq-expr)] #'(and cond ...))]
-      #;[[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
+      ;; Special case 4: (in-nested ([() (in-when COND)] ...) YS)
+      [[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
        #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        (with-syntax ([(false* ...) (build-list
                                     (length (syntax->list #'(ecr.outer-id ... ...)))
@@ -346,11 +518,13 @@
              ecr.pre-guard
              ecr.post-guard
              (ecr.loop-arg ...))])]
-      ;; general case
+      ;; General case: (in-nested ([x XS] ...) YS)
       [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
        (in-nested* stx #'#t)]
       [_ (raise-syntax-error #f "got something else" stx)])))
 
+;; A helper sequence that handles do/sequence's body.
+;; (in-body body ...) = [(begin body ...)]
 (define-sequence-syntax in-body
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
@@ -368,8 +542,12 @@
     (pattern (~and #t t) #:when (free-identifier=? #'#%datum (datum->syntax #'t '#%datum))))
   (syntax-parse stx
     #:literals (in-nested in-when)
+    ;; An optimization for the special case 2:
+    ;;   (in-nested ([() (in-when #t)] ...) YS)
     [(in-nested ([() (in-when _:true-literal)] ...+) seq-expr:expr)
      (optimize-when #'seq-expr)]
+    ;; An optimization for the special case 3:
+    ;;   (in-nested ([x XS] ...) (in-nested ([() (in-when #t)] ...) (in-body BODY)))
     [(in-nested (b-clause:bind-clause ...+) (in-nested ([() (in-when _:true-literal)] ...+) ib:in-body-expr))
      #'(in-nested (b-clause ...) ib)]
     [(in-nested (b-clause:bind-clause ...+) seq-expr:expr)
@@ -379,6 +557,14 @@
 ;; TODO:
 ;; - type annotations and an explanation of types
 
+;; A fast sequence form that allows iterating over nested sequences.
+;; Example:
+;; (do/sequence ([(x) (in-vector vec-of-lsts)]
+;;               #:when #t
+;;               [(y) (in-list x)])
+;;   y)
+;; Clauses of do/sequence have the same meaning as a for loop clauses.
+;; Using do/sequence outside a for loop is forbidden.
 (define-sequence-syntax do/sequence
   (lambda (stx)
     (raise-syntax-error #f "only allowed in a fast sequence context" stx))
