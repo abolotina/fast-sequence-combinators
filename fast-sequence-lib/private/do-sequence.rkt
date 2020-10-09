@@ -63,22 +63,6 @@
 ;; (let ([x 1] [y 2]) (add1 x)), the body expression (add1 x) is described
 ;; by Expr[G/x:Nat,y:Nat][Nat].
 ;;
-;; Syntax patterns are also allowed to contain literal identifiers. For example,
-;;
-;; (let ([x 1]) (add1 x)) : (let ([x:Id 1:Expr[G0][Nat]) (add1 x):Expr[G0/x:Nat][Nat])
-;;   where let is a literal identifier.
-;;
-;; The syntax pattern describing the syntax on the left is more specific than
-;; Expr[G0][Nat]. We can also define a new pattern using the following notation:
-;;
-;; LetExpr[G][T'] ::=
-;;   | (let ([id:Id expr:Expr[G][T]] ...) body:Expr[G/id:T...][T']) : Expr[G][T']
-;;      where let is a literal identifier.
-;;
-;; Then, we can write
-;;
-;; (let ([x 1]) (add1 x)) : LetExpr[G0][Nat]
-;;
 ;; Is this notation enough for describing macros? In Racket, macros are defined
 ;; as functions that return syntax objects. To type-check those functions, we
 ;; need to connect types of Racket expressions and syntax patterns
@@ -92,17 +76,17 @@
 ;; To describe syntax objects, we use type Syntax with a parameter. The parameter is
 ;; a syntax pattern describing the structure of the syntax object. For example,
 ;;
- (define-syntax let
-   (syntax-parser
-     [(_ ([var:id rhs:expr] ...) body:expr)
-      ;; For example, #'body has type Syntax[Expr[G0/var:T1...][T]].
-      ;; This type depends on var ..., which is a macro pattern corresponding to the
-      ;; syntax pattern marked "id" in the describtion of the let macro above.
-      ;;
-      ;; This macro is correct because body and rhs are put in the right context,
-      ;; that is, body is in the initial scope extended by var ..., and rhs is
-      ;; in the initial scope.
-      #'((lambda (var ...) body) rhs ...)]))
+;; (define-syntax let
+;;    (syntax-parser
+;;      [(_ ([var:id rhs:expr] ...) body:expr)
+;;       ;; For example, #'body has type Syntax[Expr[G0/var:T1...][T]].
+;;       ;; This type depends on var ..., which is a macro pattern corresponding to the
+;;       ;; syntax pattern marked "id" in the describtion of the let macro above.
+;;       ;;
+;;       ;; This macro is correct because body and rhs are put in the right context,
+;;       ;; that is, body is in the initial scope extended by var ..., and rhs is
+;;       ;; in the initial scope.
+;;       #'((lambda (var ...) body) rhs ...)]))
 ;;
 ;; -------------------------------------
 ;; BindingClause and ECR
@@ -123,17 +107,17 @@
 ;;   ::=
 ;;     (;; outer bindings
 ;;      ([(outer-id : Id) outer-rhs : Expr[G][O]])
-;;      loop bindings
+;;      ;; loop bindings
 ;;      ([loop-id : Id loop-expr : Expr[G/outer-id : O][L]])
-;;      pos check
+;;      ;; pos check
 ;;      pos-guard : Expr[G/outer-id : O/loop-id : L][Any]
-;;      inner bindings
+;;      ;; inner bindings
 ;;      ([inner-id inner-rhs : Expr[G/outer-id : O/loop-id : L][I]] ...)
-;;      pre guard
+;;      ;; pre guard
 ;;      pre-guard : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][Any]
-;;      post guard
+;;      ;; post guard
 ;;      post-guard : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][Any]
-;;      loop args
+;;      ;; loop args
 ;;      (loop-arg : Expr[G/outer-id : O/loop-id : L/inner-id : I, ...][L]))
 ;;    where G' ⊂ { outer-id : O/loop-id : L/inner-id : I, ...}
 ;;               and { outer-id : O/loop-id : L/inner-id : I, ...} - dom(G')
