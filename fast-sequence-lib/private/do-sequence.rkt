@@ -77,16 +77,16 @@
 ;; a syntax pattern describing the structure of the syntax object. For example,
 ;;
 ;; (define-syntax let
-;;    (syntax-parser
-;;      [(_ ([var:id rhs:expr] ...) body:expr)
-;;       ;; For example, #'body has type Syntax[Expr[G0/var:T1...][T]].
-;;       ;; This type depends on var ..., which is a macro pattern corresponding to the
-;;       ;; syntax pattern marked "id" in the describtion of the let macro above.
-;;       ;;
-;;       ;; This macro is correct because body and rhs are put in the right context,
-;;       ;; that is, body is in the initial scope extended by var ..., and rhs is
-;;       ;; in the initial scope.
-;;       #'((lambda (var ...) body) rhs ...)]))
+;;   (syntax-parser
+;;     [(_ ([var:id rhs:expr] ...) body:expr)
+;;      ;; For example, #'body has type Syntax[Expr[G0/var:T1...][T]].
+;;      ;; This type depends on var ..., which is a macro pattern corresponding to the
+;;      ;; syntax pattern marked "id" in the describtion of the let macro above.
+;;      ;;
+;;      ;; This macro is correct because body and rhs are put in the right context,
+;;      ;; that is, body is in the initial scope extended by var ..., and rhs is
+;;      ;; in the initial scope.
+;;      #'((lambda (var ...) body) rhs ...)]))
 ;;
 ;; -------------------------------------
 ;; BindingClause and ECR
@@ -389,7 +389,7 @@
     (pattern (in-body body:expr ...+))))
 
 ;; in-nested-optimize-body : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
-;; An optimization for the special case 1:
+;; An optimization for the special case:
 ;;   (in-nested ([x XS] ...) (in-body BODY))
 (define-for-syntax (in-nested-optimize-body stx)
   (syntax-parse stx
@@ -465,10 +465,10 @@
   (lambda (stx)
     (syntax-parse stx
       #:literals (in-nested in-when)
-      ;; Special case 1: (in-nested ([x XS] ...) (in-body BODY))
+      ;; Special case: (in-nested ([x XS] ...) (in-body BODY))
       [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
        (in-nested-optimize-body stx)]
-      ;; Special case 5 (v.1): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
+      ;; Special case: (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
       #;[[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
        #'[(id ...)
@@ -476,11 +476,11 @@
                                                (lambda (b-clause.id1 ... ...) (and cond ...))
                                                (do/sequence (b-clause ...) (values b-clause.id1 ... ...)))])
                      seq-expr)]]
-      ;; Special case 5 (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
+      ;; Special case (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
       [[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
        (in-nested* #'[(id ...) (in-nested (b-clause ...) seq-expr)] #'(and cond ...))]
-      ;; Special case 4: (in-nested ([() (in-when COND)] ...) YS)
+      ;; Special case: (in-nested ([() (in-when COND)] ...) YS)
       [[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
        #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        (with-syntax ([(false* ...) (build-list
@@ -526,11 +526,11 @@
     (pattern (~and #t t) #:when (free-identifier=? #'#%datum (datum->syntax #'t '#%datum))))
   (syntax-parse stx
     #:literals (in-nested in-when)
-    ;; An optimization for the special case 2:
+    ;; An optimization for the special case:
     ;;   (in-nested ([() (in-when #t)] ...) YS)
     [(in-nested ([() (in-when _:true-literal)] ...+) seq-expr:expr)
      (optimize-when #'seq-expr)]
-    ;; An optimization for the special case 3:
+    ;; An optimization for the special case:
     ;;   (in-nested ([x XS] ...) (in-nested ([() (in-when #t)] ...) (in-body BODY)))
     [(in-nested (b-clause:bind-clause ...+) (in-nested ([() (in-when _:true-literal)] ...+) ib:in-body-expr))
      #'(in-nested (b-clause ...) ib)]
