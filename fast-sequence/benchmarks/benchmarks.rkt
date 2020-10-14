@@ -5,6 +5,7 @@
                      syntax/parse
                      racket/list
                      racket/match)
+         racket/bool
          racket/sequence
          racket/list
          racket/math
@@ -14,7 +15,7 @@
          "../private/fast-sequence-testing.rkt"
          "nest.rkt")
 
-(define ITER-CT 500000)
+(define ITER-CT 1000000)
 
 (define lengths '(10 25 50 100 300 500 700 1000))
 
@@ -53,7 +54,8 @@
   (syntax-parse stx
     [(_ label:str nest-level:nat
         (~optional (~seq #:mode mode) #:defaults ([mode #''list-of-lists]))
-        expr1:expr expr2:expr)
+        (~optional (~seq #:out-file filename))
+        expr1:expr (~optional expr2:expr))
      (let* ([nl (syntax-parse #'nest-level
                   [n:nat (syntax->datum #'n)])]
             [ids (generate-temporaries (make-list (add1 nl) 'l))])
@@ -84,27 +86,72 @@
                #,(match-mode (attribute mode)
                    ['list-of-lists #'(in-list seq-expr)]
                    ['list-of-ranges #'(in-range seq-expr)]))
+             (define out #,(if (attribute filename)
+                               #'(open-output-file filename #:exists 'replace)
+                               #'(current-output-port)))
              (pretty-write
               (list (list label #,(benchmarks-apply #'(time** expr1 d)))
-                    (list "Solution w/o do/sequence"
-                          #,(benchmarks-apply #'(time** expr2 d))))))))]))
+                    #,@(if (attribute expr2)
+                           #`((list "Solution w/o do/sequence"
+                                    #,(benchmarks-apply #'(time** expr2 d))))
+                           #'()))
+              out)
+             #,@(if (attribute filename)
+                    #'((close-output-port out))
+                    #'()))))]))
 
 (define (length* x)
   (cond
     [(list? x) (length x)]
     [(natural? x) x]))
 
+(define out-path
+  "/home/anna/Документы/fast-sequence-research/benchmarks/srcs/")
+
 ;; ---------------------------------------------
 ;; benchmarks
 
-(time* "Nesting w/ do/sequence: general when-clauses" 1
+(time* "Nesting w/ do/sequence: general when-clauses (Opt. 1+3)" 1
+       #:out-file (string-append out-path "opt1+3.txt")
        (for/list ([x (do/sequence ([(x) (in-list S)]
-                                   #:when (> (length* x) 3)
+                                   #:when true
                                    [(z) (in-inner x)])
+                       z)])
+         x))
+
+(time* "Nesting w/ do/sequence: general when-clauses (Opt. 1)" 1
+       #:out-file (string-append out-path "opt1.txt")
+       (for/list ([x (do/sequence-opt1 ([(x) (in-list S)]
+                                        #:when true
+                                        [(z) (in-inner x)])
+                       z)])
+         x))
+
+(time* "Nesting w/ do/sequence: general when-clauses (Opt. 2)" 1
+       #:out-file (string-append out-path "opt2.txt")
+       (for/list ([x (do/sequence-opt2 ([(x) (in-list S)]
+                                        #:when true
+                                        [(z) (in-inner x)])
+                       z)])
+         x))
+
+(time* "Nesting w/ do/sequence: general when-clauses (Opt. 3)" 1
+       #:out-file (string-append out-path "opt3.txt")
+       (for/list ([x (do/sequence-opt3 ([(x) (in-list S)]
+                                        #:when true
+                                        [(z) (in-inner x)])
+                       z)])
+         x))
+
+(time* "Nesting w/ do/sequence: general when-clauses (W/o opt.)" 1
+       #:out-file (string-append out-path "wo-opt.txt")
+       (for/list ([x (do/sequence-w/o-opt ([(x) (in-list S)]
+                                           #:when true
+                                           [(z) (in-inner x)])
                        z)])
          x)
        (for/list ([(x) (in-list S)]
-                  #:when (> (length* x) 3)
+                  #:when true
                   [(z) (in-inner x)])
          z))
 
