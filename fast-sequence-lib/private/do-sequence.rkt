@@ -463,66 +463,57 @@
          ecr.post-guard
          (ecr.loop-arg ...))]]))
 
-(define-syntax (define-in-nested stx)
-  (define-syntax-rule (splice-when cond body)
-    (if cond #'((body)) #'()))
-  (syntax-parse stx
-    [(_ ident)
-     ;; in-nested : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
-     #`(define-sequence-syntax ident
-         (lambda (stx)
-           (raise-syntax-error #f "only allowed in a fast sequence context" stx))
-         (lambda (stx)
-           (syntax-parse stx
-             #:literals (ident in-when)
-             ;; Special case: (in-nested ([x XS] ...) (in-body BODY))
-             [[(id:id (... ...)) (_ (b-clause1:bind-clause b-clause:bind-clause (... ...)) ib:in-body-expr)]
-              (in-nested-optimize-body stx)]
-             ;; Special case: (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
-             #,@(splice-when opt-2?
-             [[(id:id (... ...)) (_ (b-clause1:bind-clause b-clause:bind-clause (... ...))
-                                    (ident ([() (in-when cond1:expr)] [() (in-when cond:expr)] (... ...)) seq-expr:expr))]
-                #'[(id (... ...))
-                   (ident ([(b-clause1.id1 (... ...) b-clause.id1 (... ...) (... ...))
-                            (fast-sequence-filter
-                             (lambda (b-clause1.id1 (... ...) b-clause.id1 (... ...) (... ...))
-                               (and cond1 cond (... ...)))
-                             (do/sequence (b-clause1 b-clause (... ...))
-                                          (values b-clause1.id1 (... ...) b-clause.id1 (... ...) (... ...))))])
-                          seq-expr)]])
-             #,@(splice-when opt-3?
-             ;; Special case (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
-             [[(id:id (... ...)) (_ (b-clause1:bind-clause b-clause:bind-clause (... ...))
-                              (ident ([() (in-when cond1:expr)] [() (in-when cond:expr)] (... ...)) seq-expr:expr))]
-              (in-nested* #'[(id (... ...)) (ident (b-clause1 b-clause (... ...)) seq-expr)] #'(and cond1 cond (... ...)))])
-             ;; Special case: (in-nested ([() (in-when COND)] ...) YS)
-             #,@(splice-when opt-1?
-             [[(id:id (... ...)) (_ ([() (in-when cond1:expr)] [() (in-when cond:expr)] (... ...)) seq-expr:expr)]
-              #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id (... ...)) seq-expr])
-              (with-syntax ([(false* (... ...)) (build-list
-                                           (length (syntax->list #'(ecr.outer-id (... ...) (... ...))))
-                                           (lambda (x) #'#f))]
-                            [(cond-val) (generate-temporaries #'(cond-val))])
-                #'[(id (... ...))
-                   (:do-in
-                    ([(ecr.outer-id (... ...) (... ...) cond-val)
-                      (let ([cond-val (and cond1 cond (... ...))])
-                        (if cond-val
-                            (let-values ([(ecr.outer-id (... ...)) ecr.outer-rhs] (... ...))
-                              (values ecr.outer-id (... ...) (... ...) #t))
-                            (values false* (... ...) #f)))])
-                    (and cond-val ecr.outer-check)
-                    ([ecr.loop-id (and cond-val ecr.loop-expr)] (... ...))
-                    (and cond-val ecr.pos-guard)
-                    ([(ecr.inner-id (... ...)) ecr.inner-rhs] (... ...))
-                    ecr.pre-guard
-                    ecr.post-guard
-                    (ecr.loop-arg (... ...)))])])
-             ;; General case: (in-nested ([x XS] ...) YS)
-             [[(id:id (... ...)) (_ (b-clause1:bind-clause b-clause:bind-clause (... ...)) seq-expr:expr)]
-              (in-nested* stx #'#t)]
-             [_ (raise-syntax-error #f "got something else" stx)])))]))
-(define-in-nested in-nested)
+;; in-nested : Syntax[BindingClause[G][{id:t ...}]] -> Syntax[ECR[G][{id:t ...}]]
+(define-sequence-syntax in-nested
+  (lambda (stx)
+    (raise-syntax-error #f "only allowed in a fast sequence context" stx))
+  (lambda (stx)
+    (syntax-parse stx
+      #:literals (in-nested in-when)
+      ;; Special case: (in-nested ([x XS] ...) (in-body BODY))
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
+       (in-nested-optimize-body stx)]
+      ;; Special case: (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
+      [[(id:id ...) (_ (b-clause:bind-clause ...+)
+                       (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
+       #:when opt-2?
+       #'[(id ...)
+          (in-nested ([(b-clause.id1 ... ...) (fast-sequence-filter
+                                               (lambda (b-clause.id1 ... ...) (and cond ...))
+                                               (do/sequence (b-clause ...) (values b-clause.id1 ... ...)))])
+                     seq-expr)]]
+      ;; Special case (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
+      [[(id:id ...) (_ (b-clause:bind-clause ...+)
+                       (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
+       #:when opt-3?
+       (in-nested* #'[(id ...) (in-nested (b-clause ...) seq-expr)] #'(and cond ...))]
+      ;; Special case: (in-nested ([() (in-when COND)] ...) YS)
+      [[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
+       #:when opt-1?
+       #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
+       (with-syntax ([(false* ...) (build-list
+                                    (length (syntax->list #'(ecr.outer-id ... ...)))
+                                    (lambda (x) #'#f))]
+                     [(cond-val) (generate-temporaries #'(cond-val))])
+         #'[(id ...)
+            (:do-in
+             ([(ecr.outer-id ... ... cond-val)
+               (let ([cond-val (and cond ...)])
+                 (if cond-val
+                     (let-values ([(ecr.outer-id ...) ecr.outer-rhs] ...)
+                       (values ecr.outer-id ... ... #t))
+                     (values false* ... #f)))])
+             (and cond-val ecr.outer-check)
+             ([ecr.loop-id (and cond-val ecr.loop-expr)] ...)
+             (and cond-val ecr.pos-guard)
+             ([(ecr.inner-id ...) ecr.inner-rhs] ...)
+             ecr.pre-guard
+             ecr.post-guard
+             (ecr.loop-arg ...))])]
+      ;; General case: (in-nested ([x XS] ...) YS)
+      [[(id:id ...) (_ (b-clause:bind-clause ...+) seq-expr:expr)]
+       (in-nested* stx #'#t)]
+      [_ (raise-syntax-error #f "got something else" stx)])))
 
 ;; A helper sequence that handles do/sequence's body.
 ;; (in-body body ...) = [(begin body ...)]

@@ -123,9 +123,22 @@ to a specialized sequence, still run fast. Note that as like as
 specialized sequences, their applications are efficient only when
 applied in a clause of a @racket[for] loop or its variants, so it is
 necessary to define a fast sequence form instead of merely using
-@racket[define]. The @racket[define-sequence-rule] from is similar to
+@racket[define]. The @racket[define-sequence-rule] form is similar to
 @racket[define-syntax-rule], but it defines a sequence macro, which
 can be efficiently used in a @racket[for] loop clause.
+
+Alternatively, you can use the @racket[do/sequence] form whose syntax
+is similar to the syntax of a @racket[for] loop:
+
+@examples[#:eval my-evaluator #:label #f
+(define-sequence-rule (squares-of-evens-up-to-10000)
+  (do/sequence ([x (in-range 1 10000)]
+                #:when (even? x))
+    (sqr x)))
+ ]
+
+The @racket[do/sequence] form is a more powerful operation, which, in
+particular, allows nested iterations.
 
 @section{Fast Sequence Operations}
 
@@ -268,8 +281,9 @@ provides better performance when @racket[template] is a fast sequence
 expression.
 
 @examples[#:eval my-evaluator
-          (define-sequence-rule (in-hash-set vec-of-lsts)
-            (do/sequence ([(x) (in-vector vec-of-lsts)]
+          (struct 2-level-list (lst-of-lsts))
+          (define-sequence-rule (in-2-level-list lst-of-lsts)
+            (do/sequence ([(x) (in-list lst-of-lsts)]
                           #:when #t
                           [(y) (in-list x)])
               y))]
