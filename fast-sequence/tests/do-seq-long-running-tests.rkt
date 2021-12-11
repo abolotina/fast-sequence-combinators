@@ -161,7 +161,7 @@
            (exit)))])
     (begin
       (run-tests1 ns)
-      (run-tests2 ns)
+      ;(run-tests2 ns)
       (run-tests3 ns)
       (run-tests4 ns))))
 
@@ -170,3 +170,12 @@
 #;(eval (make-test (cadr seq-when-pairs)) ns)
 
 (run-tests ns)
+
+(module+ long-tests
+  (parameterize
+      ([error-escape-handler
+        (lambda ()
+          (abort-current-continuation
+           (default-continuation-prompt-tag)
+           (exit)))])
+    (run-tests2 ns)))

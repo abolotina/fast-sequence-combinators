@@ -6,13 +6,15 @@
                      syntax/parse
                      syntax/stx
                      syntax/unsafe/for-transform)
-         "fast-sequence-filter.rkt")
+         "fast-sequence-filter.rkt"
+         (submod "../private/ecr.rkt" private))
 
 (provide do/sequence)
 
 (module+ private-for-testing
   (provide in-nested
            in-when
+           in-body
            (for-syntax bind-clause
                        when-clause
                        expanded-clause-record
@@ -185,20 +187,7 @@
           #'[(id ...) (:do-in ([(expr*) (lambda () expr)]) #t () #t () (expr*) #f ())]))]
       [_ #f])))
 
-;; An expanded clause record. Contains information to fill in the loop
-;; skeleton: how to start looping, how to decide whether to stop,
-;; how to bind loop variables, how to recur, and a few more checks. 
 (begin-for-syntax
-  (define-syntax-class expanded-clause-record
-    (pattern [([(outer-id ...) outer-rhs] ...)
-              outer-check
-              ([loop-id loop-expr] ...)
-              pos-guard
-              ([(inner-id ...) inner-rhs] ...)
-              pre-guard
-              post-guard
-              (loop-arg ...)]))
-  
   ;; A binding clause.
   ;;
   ;; bind-clause =
