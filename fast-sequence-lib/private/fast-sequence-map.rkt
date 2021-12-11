@@ -30,7 +30,7 @@
                   (:do-in
                    ;;outer bindings
                    ([(eb.outer-id ...) eb.outer-rhs] ... ...
-                    [f* f])
+                    [(f*) f])
                    ;; outer check
                    (and eb.outer-check ...)
                    ;; loop bindings

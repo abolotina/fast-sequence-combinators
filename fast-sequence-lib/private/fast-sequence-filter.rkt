@@ -54,7 +54,7 @@
                 (:do-in
                  ;; outer bindings
                  ([(eb.outer-id ...) eb.outer-rhs] ...
-                  [f* f])
+                  [(f*) f])
                  ;; outer check
                  eb.outer-check
                  ;; loop bindings
@@ -64,7 +64,7 @@
                  ;; inner bindings
                  ([(eb.inner-id ... ... loop-id* ... ok)
                    (let loop ([eb.loop-id eb.loop-id] ...)
-                     (if pos-guard
+                     (if eb.pos-guard
                          (let-values ([(eb.inner-id ...) eb.inner-rhs] ...)
                            (let ([loop-arg* eb.loop-arg] ...)
                              (if (and eb.pre-guard
