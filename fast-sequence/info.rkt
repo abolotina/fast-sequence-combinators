@@ -9,7 +9,8 @@
     "fast-sequence-lib"
     "rackunit-lib"))
 (define build-deps
-  '("racket-doc"
+  '("sandbox-lib"
+    "racket-doc"
     "scribble-lib"))
 (define implies
   '("fast-sequence-lib"))
