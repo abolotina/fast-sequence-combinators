@@ -535,9 +535,6 @@
      #`(in-nested (b-clause ...) #,(optimize-when #'seq-expr))]
     [_ stx]))
 
-;; TODO:
-;; - type annotations and an explanation of types
-
 ;; A fast sequence form that allows iterating over nested sequences.
 ;; Example:
 ;; (do/sequence ([(x) (in-vector vec-of-lsts)]
