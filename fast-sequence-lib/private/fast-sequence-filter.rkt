@@ -2,7 +2,10 @@
 
 (require (for-syntax racket/syntax
                      syntax/unsafe/for-transform
-                     racket/base))
+                     racket/base
+                     syntax/parse)
+         (submod "../private/ecr.rkt" private)
+         racket/sequence)
 
 (provide fast-sequence-filter)
 
@@ -26,7 +29,7 @@
   (define (fast-sequence-filter-transformer stx expanded-for-clause)
     (syntax-case stx ()
       [((id ...) f orig-seq-exrp)
-       (syntax-case expanded-for-clause ()
+       (syntax-parse expanded-for-clause
          ;; stx :
          ;;   Syntax[((id : Id ...)
          ;;           f : Expr[G, id : e', ...][e' ... -> t]
@@ -39,42 +42,35 @@
          ;;            post-guard : Expr[G'][q]
          ;;            (loop-arg : Expr[G'][c] ...)))]
          ;; where G' = G, outer-id : a, ..., loop-id : c, ..., inner-id : e, ... ...
-         [(([(outer-id ...) outer-rhs] ...)
-           outer-check
-           ([loop-id loop-expr] ...)
-           pos-guard
-           ([(inner-id ...) inner-rhs] ...)
-           pre-guard
-           post-guard
-           (loop-arg ...))
+         [eb:expanded-clause-record
           ;; ==>
-          (with-syntax* ([estx expanded-for-clause]
-                         [(loop-id* ...) (generate-temporaries #'(loop-id ...))]
-                         [(loop-arg* ...) (generate-temporaries #'(loop-arg ...))]
+          (with-syntax* ([(loop-id* ...) (generate-temporaries #'(eb.loop-id ...))]
+                         [(loop-arg* ...) (generate-temporaries #'(eb.loop-arg ...))]
                          [(false* ...) (build-list
-                                       (length (syntax->list #'(inner-id ... ... loop-arg* ...)))
+                                       (length (syntax->list #'(eb.inner-id ... ... loop-arg* ...)))
                                        (lambda (x) #'#f))])
             (for-clause-syntax-protect
              #'[(id ...)
                 (:do-in
                  ;; outer bindings
-                 ([(outer-id ...) outer-rhs] ...)
+                 ([(eb.outer-id ...) eb.outer-rhs] ...
+                  [(f*) f])
                  ;; outer check
-                 outer-check
+                 eb.outer-check
                  ;; loop bindings
-                 ([loop-id loop-expr] ...)
+                 ([eb.loop-id eb.loop-expr] ...)
                  ;; pos check
                  #t
                  ;; inner bindings
-                 ([(inner-id ... ... loop-id* ... ok)
-                   (let loop ([loop-id loop-id] ...)
-                     (if pos-guard
-                         (let-values ([(inner-id ...) inner-rhs] ...)
-                           (let ([loop-arg* loop-arg] ...)
-                             (if (and pre-guard
-                                      post-guard)
-                                 (if (f id ...)
-                                     (values inner-id ... ... loop-arg* ... #t)
+                 ([(eb.inner-id ... ... loop-id* ... ok)
+                   (let loop ([eb.loop-id eb.loop-id] ...)
+                     (if eb.pos-guard
+                         (let-values ([(eb.inner-id ...) eb.inner-rhs] ...)
+                           (let ([loop-arg* eb.loop-arg] ...)
+                             (if (and eb.pre-guard
+                                      eb.post-guard)
+                                 (if (f* id ...)
+                                     (values eb.inner-id ... ... loop-arg* ... #t)
                                      (loop loop-arg* ...))
                                  (values false* ... #f))))
                          (values false* ... #f)))])

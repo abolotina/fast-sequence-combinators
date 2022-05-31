@@ -2,7 +2,9 @@
 
 (require (for-syntax racket/syntax
                      syntax/unsafe/for-transform
-                     racket/base))
+                     racket/base
+                     syntax/parse)
+         (submod "../private/ecr.rkt" private))
 
 (provide fast-sequence-map)
 
@@ -16,46 +18,40 @@
                                    (expand-for-clause stx #`[(#,temp) #,seq]))
                                  (syntax->list #'(temp-id ...))
                                  (syntax->list #'(seq-expr ...)))])
-         (syntax-case #'estx ()
-           [((([(outer-id ...) outer-rhs] ...)
-              outer-check
-              ([loop-id loop-expr] ...)
-              pos-guard
-              ([(inner-id ...) inner-rhs] ...)
-              pre-guard
-              post-guard
-              (loop-arg ...)) ...)
+         (syntax-parse #'estx
+           [(eb:expanded-clause-record ...)
             ;; ==>
             (with-syntax ([(ok) (generate-temporaries #'(ok))]
                           [(false* ...) (build-list
-                                         (length (syntax->list #'(inner-id ... ... ... id ...)))
+                                         (length (syntax->list #'(eb.inner-id ... ... ... id ...)))
                                          (lambda (x) #'#f))])
               (for-clause-syntax-protect
                #'[(id ...)
                   (:do-in
                    ;;outer bindings
-                   ([(outer-id ...) outer-rhs] ... ...)
+                   ([(eb.outer-id ...) eb.outer-rhs] ... ...
+                    [(f*) f])
                    ;; outer check
-                   (and outer-check ...)
+                   (and eb.outer-check ...)
                    ;; loop bindings
-                   ([loop-id loop-expr] ... ...)
+                   ([eb.loop-id eb.loop-expr] ... ...)
                    ;; pos check
-                   (and pos-guard ...)
+                   (and eb.pos-guard ...)
                    ;; inner bindings
-                   ([(inner-id ... ... ... id ... ok)
-                     (let-values ([(inner-id ...) inner-rhs] ... ...)
+                   ([(eb.inner-id ... ... ... id ... ok)
+                     (let-values ([(eb.inner-id ...) eb.inner-rhs] ... ...)
                        (cond
-                         [(and pre-guard ...)
-                          (let-values ([(id ...) (f temp-id ...)])
-                            (values inner-id ... ... ... id ... #t))]
+                         [(and eb.pre-guard ...)
+                          (let-values ([(id ...) (f* temp-id ...)])
+                            (values eb.inner-id ... ... ... id ... #t))]
                          [else
                           (values false* ... #f)]))])
                    ;; pre guard
                    ok
                    ;; post guard
-                   (and post-guard ...)
+                   (and eb.post-guard ...)
                    ;; loop args
-                   (loop-arg ... ...))]))]
+                   (eb.loop-arg ... ...))]))]
            [else (raise-syntax-error #f "bad syntax" #'estx)]
            ))]
       [_ #f])))
