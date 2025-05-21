@@ -6,25 +6,18 @@
                      syntax/parse
                      syntax/stx
                      syntax/unsafe/for-transform)
-         "fast-sequence-filter.rkt"
-         (submod "../private/ecr.rkt" private))
+         "fast-sequence-filter.rkt")
 
-(provide do/sequence)
+(provide (rename-out [do/sequence do/sequence-opt3]))
 
 (module+ private-for-testing
   (provide in-nested
            in-when
-           in-body
            (for-syntax bind-clause
                        when-clause
                        expanded-clause-record
                        nest
                        merge)))
-
-(begin-for-syntax
-  (define opt-1? #t)
-  (define opt-2? #f)
-  (define opt-3? #t))
 
 ;; -------------------------------------
 ;; How to read types
@@ -187,7 +180,20 @@
           #'[(id ...) (:do-in ([(expr*) (lambda () expr)]) #t () #t () (expr*) #f ())]))]
       [_ #f])))
 
+;; An expanded clause record. Contains information to fill in the loop
+;; skeleton: how to start looping, how to decide whether to stop,
+;; how to bind loop variables, how to recur, and a few more checks. 
 (begin-for-syntax
+  (define-syntax-class expanded-clause-record
+    (pattern [([(outer-id ...) outer-rhs] ...)
+              outer-check
+              ([loop-id loop-expr] ...)
+              pos-guard
+              ([(inner-id ...) inner-rhs] ...)
+              pre-guard
+              post-guard
+              (loop-arg ...)]))
+  
   ;; A binding clause.
   ;;
   ;; bind-clause =
@@ -463,9 +469,8 @@
       [[(id:id ...) (_ (b-clause:bind-clause ...+) ib:in-body-expr)]
        (in-nested-optimize-body stx)]
       ;; Special case: (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
-      [[(id:id ...) (_ (b-clause:bind-clause ...+)
+      #;[[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
-       #:when opt-2?
        #'[(id ...)
           (in-nested ([(b-clause.id1 ... ...) (fast-sequence-filter
                                                (lambda (b-clause.id1 ... ...) (and cond ...))
@@ -474,11 +479,9 @@
       ;; Special case (v.2): (in-nested ([x XS] ...) (in-nested ([() (in-when COND)] ...) YS))
       [[(id:id ...) (_ (b-clause:bind-clause ...+)
                        (in-nested ([() (in-when cond:expr)] ...+) seq-expr:expr))]
-       #:when opt-3?
        (in-nested* #'[(id ...) (in-nested (b-clause ...) seq-expr)] #'(and cond ...))]
       ;; Special case: (in-nested ([() (in-when COND)] ...) YS)
-      [[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
-       #:when opt-1?
+      #;[[(id:id ...) (_ ([() (in-when cond:expr)] ...+) seq-expr:expr)]
        #:with ecr:expanded-clause-record (expand-for-clause stx #'[(id ...) seq-expr])
        (with-syntax ([(false* ...) (build-list
                                     (length (syntax->list #'(ecr.outer-id ... ...)))
@@ -534,6 +537,9 @@
     [(in-nested (b-clause:bind-clause ...+) seq-expr:expr)
      #`(in-nested (b-clause ...) #,(optimize-when #'seq-expr))]
     [_ stx]))
+
+;; TODO:
+;; - type annotations and an explanation of types
 
 ;; A fast sequence form that allows iterating over nested sequences.
 ;; Example:
