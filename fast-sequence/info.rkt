@@ -11,7 +11,9 @@
   '(Apache-2.0 OR MIT))
 
 (define deps
-  '(["base" #:version "7.4"]
+  '("plot-gui-lib"
+    "plot-lib"
+    ["base" #:version "7.4"]
     "fast-sequence-lib"
     "rackunit-lib"))
 (define build-deps
